@@ -1,0 +1,29 @@
+name: Build S25 FE Profile
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+      
+      - name: Build payload
+        run: |
+          make TARGET=essi-S731BXXU6BZDP ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
+          make TARGET=essi-S731BXXU6BZDP ANDROID_NDK_HOME="$ANDROID_NDK_HOME"
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25fe-payload
+          path: |
+            build/essi-S731BXXU6BZDP/cve-2026-43499-app.release.so
+            build/essi-S731BXXU6BZDP/cve-2026-43499-root
+      
+      - name: Show build output
+        run: ls -la build/essi-S731BXXU6BZDP/
