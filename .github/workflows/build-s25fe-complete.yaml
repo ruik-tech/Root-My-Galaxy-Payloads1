@@ -60,4 +60,24 @@ jobs:
 
       - name: Install dependencies for ksud
         run: |
-          sudo
+          apt-get update
+          apt-get install -y linux-headers-generic linux-libc-dev
+
+      - name: Build ksud
+        run: |
+          cd KernelSU/userspace/ksud
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          cargo build --release --target aarch64-linux-android -p ksud
+          ls -la target/aarch64-linux-android/release/ksud
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25fe-complete
+          path: |
+            payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-app.release.so
+            payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-root
+            KernelSU/kernel/kernelsu.ko
+            KernelSU/userspace/ksud/target/aarch64-linux-android/release/ksud
