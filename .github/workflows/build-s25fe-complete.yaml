@@ -1,0 +1,79 @@
+name: Build S25 FE Complete
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: payloads
+
+      - name: Clone KernelSU
+        run: |
+          git clone https://github.com/tiann/KernelSU.git
+          cd KernelSU
+          git checkout v3.2.5
+          git apply ../payloads/kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Build exploit payload
+        run: |
+          cd payloads
+          make TARGET=essi-S731BXXU6BZDP ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
+          ls -la build/essi-S731BXXU6BZDP/
+
+      - name: Build KernelSU module
+        run: |
+          docker run --rm \
+            -v "$PWD/KernelSU:/workspace" \
+            -w /workspace/kernel \
+            ghcr.io/ylarod/ddk-min:android14-6.1-20260313 \
+            bash -lc "
+              sed -i 's/6.1.166-dirty/6.1.157-android14-11/g' \
+                \"\$KDIR/include/generated/utsrelease.h\" \
+                \"\$KDIR/include/config/kernel.release\"
+              make clean
+              CONFIG_KSU=m \
+              CONFIG_KSU_SAMSUNG_KDP=y \
+              CONFIG_KSU_SAMSUNG_RKP=y \
+              CONFIG_KSU_SAMSUNG_DEFEX=y \
+              CC=clang make -j\$(nproc)
+              modinfo ./kernelsu.ko
+            "
+
+      - name: Strip module and copy to ksud assets
+        run: |
+          # Find llvm-strip from the NDK
+          STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+          $STRIP -d KernelSU/kernel/kernelsu.ko
+          mkdir -p KernelSU/userspace/ksud/bin/aarch64
+          cp KernelSU/kernel/kernelsu.ko KernelSU/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
+
+      - name: Build ksud
+        run: |
+          cd KernelSU/userspace/ksud
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          cargo build --release --target aarch64-linux-android -p ksud
+          ls -la target/aarch64-linux-android/release/ksud
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25fe-complete
+          path: |
+            payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-app.release.so
+            payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-root
+            KernelSU/kernel/kernelsu.ko
+            KernelSU/userspace/ksud/target/aarch64-linux-android/release/ksud
