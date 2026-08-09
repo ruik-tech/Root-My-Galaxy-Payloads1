@@ -58,14 +58,11 @@ jobs:
           mkdir -p KernelSU/userspace/ksud/bin/aarch64
           cp KernelSU/kernel/kernelsu.ko KernelSU/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
 
-      - name: Install dependencies for ksud
-        run: |
-          apt-get update
-          apt-get install -y linux-headers-generic linux-libc-dev
-
       - name: Build ksud
         run: |
           cd KernelSU/userspace/ksud
+          export SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android35 --sysroot=$SYSROOT"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
           export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
           export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
