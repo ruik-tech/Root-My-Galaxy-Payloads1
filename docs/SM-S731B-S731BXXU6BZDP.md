@@ -61,25 +61,45 @@
 
 ## Structure Layouts (from BTF)
 sizeof(struct file_operations) = 0x110
+
 file_operations.unlocked_ioctl = 0x50
+
 file_operations.compat_ioctl = 0x58
+
 file_operations.mmap = 0x60
+
 file_operations.open = 0x70
+
 file_operations.release = 0x80
+
 file_operations.splice_read = 0xc8
+
 file_operations.show_fdinfo = 0xe0
+
 task_struct.usage = 0x40
+
 task_struct.prio = 0x84
+
 task_struct.normal_prio = 0x8c
+
 task_struct.sched_task_group = 0x348
+
 task_struct.pi_lock = 0x924
+
 task_struct.pi_waiters = 0x938
+
 task_struct.pi_top_task = 0x948
+
 task_struct.pi_blocked_on = 0x950
+
 sizeof(struct page) = 0x40
+
 page.compound_head = 0x08
+
 page.slab_cache = 0x18
+
 page.page_type = 0x30
+
 
 ## Physical Load Address
 
