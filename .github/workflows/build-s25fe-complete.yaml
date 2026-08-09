@@ -64,4 +64,44 @@ jobs:
       - name: Build ksud
         run: |
           cd KernelSU/userspace/ksud
-          export SYSROOT="$ANDROID_NDK
+          export SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android35 --sysroot=$SYSROOT"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          cargo build --release --target aarch64-linux-android -p ksud
+          echo "=== ksud locations ==="
+          find . -name ksud -type f 2>/dev/null
+          find ../../ -name ksud -type f 2>/dev/null
+
+      - name: Verify and upload artifacts
+        run: |
+          echo "=== Payload files ==="
+          ls -la payloads/build/essi-S731BXXU6BZDP/
+          echo "=== KernelSU files ==="
+          ls -la KernelSU/kernel/kernelsu.ko
+          echo "=== ksud files ==="
+          find KernelSU -name ksud -type f
+          
+          # Copy everything to a flat upload directory
+          mkdir -p upload
+          cp payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-app.release.so upload/cve-2026-43499-app.so
+          cp payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-root upload/
+          cp KernelSU/kernel/kernelsu.ko upload/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko
+          
+          # Find ksud wherever cargo put it
+          KSD=$(find KernelSU -name ksud -type f | head -1)
+          if [ -n "$KSD" ]; then
+            cp "$KSD" upload/ksud-essi-S731BXXU6BZDP-kdp
+            echo "Found ksud at: $KSD"
+          else
+            echo "WARNING: ksud not found"
+          fi
+          
+          ls -la upload/
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25fe-complete
+          path: upload/*
