@@ -177,11 +177,11 @@
     "kernelVersions": ["6.1.157"],
     "requiresFreshP0Session": true,
     "exploit": {
-        "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads/main/artifacts/essi-S731BXXU6BZDP/cve-2026-43499-app.so",
+        "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads1/main/artifacts/essi-S731BXXU6BZDP/cve-2026-43499-app.so",
         "size": 104128
     },
     "kernelsu": {
-        "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads/main/kernelsu/ksud-essi-S731BXXU6BZDP-kdp",
+        "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads1/main/kernelsu/ksud-essi-S731BXXU6BZDP-kdp",
         "size": 4888848
         }
       }
