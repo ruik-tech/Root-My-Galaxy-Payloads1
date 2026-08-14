@@ -470,24 +470,17 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
       _exit(11);
     }
 
-    pid_t loader = fork();
-    if (loader < 0) {
-      dprintf(STDERR_FILENO, "late-load: fork: %s\n", strerror(errno));
+       /* Direct module load instead of ksud late-load */
+    int ko_fd = open("/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko", O_RDONLY);
+    if (ko_fd < 0) {
+      dprintf(STDERR_FILENO, "late-load: open .ko failed errno=%d\n", errno);
       _exit(12);
     }
-    if (loader == 0) {
-      /* Let the downloaded target-specific ksud select its embedded module
-       * from the running kernel.  Hard-coding android15-6.6 made the shared
-       * loader path unusable for exact 6.1 payloads such as E2S. */
-      execl(LOGCAT_PATH, "logcat", "late-load", "--package-name",
-            "me.weishu.kernelsu", (char *)NULL);
-      dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
+    int ret = syscall(__NR_init_module, ko_fd, "", NULL);
+    close(ko_fd);
+    if (ret != 0) {
+      dprintf(STDERR_FILENO, "late-load: init_module failed ret=%d errno=%d\n", ret, errno);
       _exit(12);
-    }
-
-    int loader_status = wait_status(loader);
-    if (loader_status != 0) {
-      _exit(loader_status);
     }
     _exit(verify_kernelsu_control());
   }
