@@ -661,8 +661,8 @@ int run_exploit(int argc, char **argv) {
                 int log_fd = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud.log",
                                      O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (log_fd >= 0) {
-                    syscall(SYS_dup2, log_fd, 1);
-                    syscall(SYS_dup2, log_fd, 2);
+                    syscall(SYS_dup3, log_fd, 1, 0);
+                    syscall(SYS_dup3, log_fd, 2, 0);
                     syscall(SYS_close, log_fd);
                 }
                 
