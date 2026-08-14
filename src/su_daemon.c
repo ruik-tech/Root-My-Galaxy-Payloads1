@@ -27,7 +27,7 @@
 #define BOOTSTRAP_SOCK_PATH "/data/local/tmp/temp_su.sock"
 #define HOLD_READY_SOCKET "cve43499_roothold"
 #define SH_PATH "/system/bin/sh"
-#define KSU_LOADER_PATH "/data/local/tmp/ksud-s25u-kdp"
+#define KSU_LOADER_PATH "/data/local/tmp/ksud-patched"
 #define LOGCAT_PATH "/system/bin/logcat"
 
 static uid_t allowed_client_uid = 2000;
