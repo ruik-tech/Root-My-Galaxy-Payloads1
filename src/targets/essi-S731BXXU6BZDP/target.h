@@ -202,5 +202,6 @@
 #define FOPS_SPLICE_READ_OFF 0xc8
 #define FOPS_SHOW_FDINFO_OFF 0xe0
 #define MM_STRUCT_SZ 0x960
+#define MM_ORDER 1
 
 #endif
