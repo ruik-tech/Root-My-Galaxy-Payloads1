@@ -3,7 +3,7 @@
 
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #define BUILD_VARIANT_LABEL \
-  "essi-S731BXXU6BZDP-app-production74-slide8-fops8"
+  "essi-S731BXXS6BZE2-app-production74-slide8-fops8"
 #define APP_DEFAULT_FAST_KSNITCH 1
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
@@ -22,12 +22,12 @@
 #define APP_KERNEL_PAGE_KSNITCH_IDENTITY_END 0xffffff8080000000ULL
 #define APP_KERNEL_PAGE_KSNITCH_EXACT_PARTITION 1
 #else
-#define BUILD_VARIANT_LABEL "essi-S731BXXU6BZDP-root-umh"
+#define BUILD_VARIANT_LABEL "essi-S731BXXS6BZE2-root-umh"
 #endif
 
 #ifndef BUILD_FINGERPRINT
 #define BUILD_FINGERPRINT \
-  "samsung/r13sxx/essi:16/BP4A.251205.006/S731BXXU6BZDP:user/release-keys"
+  "samsung/r13sxx/essi:16/BP4A.251205.006/S731BXXS6BZE2:user/release-keys"
 #endif
 
 #define KIMAGE_TEXT_BASE 0xffffffc008000000ULL
@@ -112,7 +112,7 @@
 #define P0_ORACLE_GATE_OBJECT_INDEX 1
 #define P0_ORACLE_PROBE_OFFSET 0x1f0000ULL
 #define P0_FINGERPRINT_HEADER \
-  "targets/essi-S731BXXU6BZDP/p0_fingerprint.h"
+  "targets/essi-S731BXXS6BZE2/p0_fingerprint.h"
 #endif
 
 #define KERNELSNITCH_IDENTITY_START 0xffffff8000000000ULL
