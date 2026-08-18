@@ -30,10 +30,10 @@ jobs:
         run: |
           cd payloads
           # Build root helper and debug payload
-          make TARGET=essi-S731BXXU6BZDP ANDROID_NDK_HOME="$ANDROID_NDK_HOME"
+          make TARGET=essi-S731BXXS6BZE2 ANDROID_NDK_HOME="$ANDROID_NDK_HOME"
           # Build release payload
-          make TARGET=essi-S731BXXU6BZDP ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
-          ls -la build/essi-S731BXXU6BZDP/
+          make TARGET=essi-S731BXXS6BZE2 ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
+          ls -la build/essi-S731BXXS6BZE2/
 
       - name: Build KernelSU module
         run: |
@@ -77,7 +77,7 @@ jobs:
       - name: Verify and upload artifacts
         run: |
           echo "=== Payload files ==="
-          ls -la payloads/build/essi-S731BXXU6BZDP/
+          ls -la payloads/build/essi-S731BXXS6BZE2/
           echo "=== KernelSU files ==="
           ls -la KernelSU/kernel/kernelsu.ko
           echo "=== ksud files ==="
@@ -85,14 +85,14 @@ jobs:
           
           # Copy everything to a flat upload directory
           mkdir -p upload
-          cp payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-app.release.so upload/cve-2026-43499-app.so
-          cp payloads/build/essi-S731BXXU6BZDP/cve-2026-43499-root upload/
-          cp KernelSU/kernel/kernelsu.ko upload/android14-6.1_kernelsu-essi-S731BXXU6BZDP-kdp.ko
+          cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-app.release.so upload/cve-2026-43499-app.so
+          cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-root upload/
+          cp KernelSU/kernel/kernelsu.ko upload/android14-6.1_kernelsu-essi-S731BXXS6BZE2-kdp.ko
           
           # Find ksud wherever cargo put it
           KSD=$(find KernelSU -name ksud -type f | head -1)
           if [ -n "$KSD" ]; then
-            cp "$KSD" upload/ksud-essi-S731BXXU6BZDP-kdp
+            cp "$KSD" upload/ksud-essi-SS731BXXS6BZE2-kdp
             echo "Found ksud at: $KSD"
           else
             echo "WARNING: ksud not found"
