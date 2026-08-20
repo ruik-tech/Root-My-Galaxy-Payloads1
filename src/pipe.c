@@ -71,7 +71,7 @@ uint32_t pipe_probe_len;
 uint32_t pipe_probe_flags;
 uint64_t pipe_scan_first_page;
 uint64_t pipe_scan_first_ops;
-uint64_t pipe_scan_first_len;
+uint32_t pipe_scan_first_len;
 uint32_t pipe_scan_first_flags;
 uint64_t pipe_scan_q0;
 uint64_t pipe_scan_q1;
