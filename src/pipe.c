@@ -699,6 +699,7 @@ int pipe_phys_read_data(int fd, uintptr_t direct_addr, void *out, size_t len) {
 
 int pipe_phys_write_data(
  int fd, uintptr_t direct_addr, const void *data, size_t len) {
+ pr_info("PIPE_PHYS_WRITE: addr=%016zx len=%zu\n", direct_addr, len);
  if (pipebuf_page_base == 0 || pipebuf_pipe_idx < 0) {
  return 0;
  }
