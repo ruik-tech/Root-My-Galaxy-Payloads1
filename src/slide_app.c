@@ -891,6 +891,7 @@ static int slide_child_trigger_write(void) {
 static int slide_trigger_physical_state(void) {
   pid_t child = SYSCHK(fork());
   if (child == 0) {
+    pin_to_core(CORE);
     SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
     if (getppid() == 1) {
       _exit(1);
