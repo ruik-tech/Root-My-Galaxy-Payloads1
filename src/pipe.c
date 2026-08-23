@@ -196,13 +196,7 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
 
   int skb_sv[2];
   int pcp_sv[2];
-  int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
-  struct sockaddr_in addr = {0};
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(12345);
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  bind(udp_fd, (struct sockaddr *)&addr, sizeof(addr));
-  connect(udp_fd, (struct sockaddr *)&addr, sizeof(addr));
+  SYSCHK(socketpair(AF_UNIX, SOCK_STREAM, 0, skb_sv));
   SYSCHK(socketpair(AF_UNIX, SOCK_STREAM, 0, pcp_sv));
 
   struct iovec iov;
