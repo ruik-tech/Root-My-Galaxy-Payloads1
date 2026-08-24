@@ -1,42 +1,6 @@
 #include "common.h"
 #include P0_FINGERPRINT_HEADER
-#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 
-static int verify_slide_virtual(int ashmem_fd) {
-  pr_info("virtual slide verification: probing %zu candidates\n",
-          sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]));
-
-  for (size_t idx = 0;
-       idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
-       idx++) {
-    uintptr_t slide = p0_fingerprints[idx].slide;
-    uintptr_t probe_base = KIMAGE_TEXT_BASE + P0_ORACLE_PROBE_OFFSET - slide;
-
-    int match = 1;
-    for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
-      uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
-      uint64_t value = 0;
-      if (configfs_read_once(ashmem_fd, addr, &value, sizeof(value)) != (ssize_t)sizeof(value)) {
-        match = 0;
-        break;
-      }
-      if (value != p0_fingerprints[idx].words[w]) {
-        match = 0;
-        break;
-      }
-    }
-
-    if (match) {
-      pr_success("virtual slide verification matched slide=%06zx\n", slide);
-      return slide_commit_stext(KIMAGE_TEXT_BASE + slide, "virtual");
-    }
-  }
-
-  pr_error("virtual slide verification: no fingerprint matched\n");
-  return 0;
-}
-
-#endif
 #ifndef SLIDE_MAX_ATTEMPTS
 #define SLIDE_MAX_ATTEMPTS 20
 #endif
@@ -100,7 +64,7 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
     pr_warning("virtual base rejected source=%s base=%016llx\n",
                source, (unsigned long long)base);
     return 0;
-  }
+  }  
   kaslr_base = base;
   kaslr_slide = base - KIMAGE_TEXT_BASE;
   kaslr_done = 1;
@@ -111,6 +75,48 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
              (unsigned long long)kaslr_slide, slide_p0_offset);
   return 1;
 }
+static int slide_commit_stext(uint64_t stext, const char *source) {
+  // ... existing code ...
+}
+
+/* ADD verify_slide_virtual RIGHT HERE, after slide_commit_stext */
+
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+
+static int verify_slide_virtual(int ashmem_fd) {
+  pr_info("virtual slide verification: probing %zu candidates\n",
+          sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]));
+
+  for (size_t idx = 0;
+       idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
+       idx++) {
+    uintptr_t slide = p0_fingerprints[idx].slide;
+    uintptr_t probe_base = KIMAGE_TEXT_BASE + P0_ORACLE_PROBE_OFFSET - slide;
+
+    int match = 1;
+    for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
+      uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
+      uint64_t value = 0;
+      if (configfs_read_once(ashmem_fd, addr, &value, sizeof(value)) != (ssize_t)sizeof(value)) {
+        match = 0;
+        break;
+      }
+      if (value != p0_fingerprints[idx].words[w]) {
+        match = 0;
+        break;
+      }
+    }
+
+    if (match) {
+      pr_success("virtual slide verification matched slide=%06zx\n", slide);
+      return slide_commit_stext(KIMAGE_TEXT_BASE + slide, "virtual");
+    }
+  }
+
+  pr_error("virtual slide verification: no fingerprint matched\n");
+  return 0;
+}
+
 #endif
 
 static useconds_t slide_enter_delay_usec(void) {
