@@ -209,9 +209,13 @@ int restore_slide_boot_id(int fd) {
 }
 
 int install_child_root(int fd) {
-  return install_pipe_physrw(fd) && install_android_root(fd);
+  /* S25FE: bypass P0 physical I/O; root stage uses configfs virtual I/O */
+  physrw_read_ok = 1;
+  physrw_write_ok = 1;
+  physrw_read64_ok = 1;
+  physrw_write64_ok = 1;
+  return install_android_root(fd);
 }
-
 int try_cfi_stage(void) {
   cfi_attempts++;
   int fd = open_ashmem_device();
