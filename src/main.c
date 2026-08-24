@@ -222,7 +222,7 @@ static int verify_fops_data_alias_before_production(void) {
 #if defined(APP_P0_FINGERPRINT_INVERSE_SLIDE) && \
     APP_P0_FINGERPRINT_INVERSE_SLIDE
   uintptr_t aliases[] = {
-    data_addr(ASHMEM_MISC_FOPS),
+    canon_addr(ASHMEM_MISC_FOPS),
   };
   const char *names[] = {"probe-derived"};
 #else
