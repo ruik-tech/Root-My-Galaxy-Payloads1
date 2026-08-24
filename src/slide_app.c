@@ -75,12 +75,6 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
              (unsigned long long)kaslr_slide, slide_p0_offset);
   return 1;
 }
-static int slide_commit_stext(uint64_t stext, const char *source) {
-  // ... existing code ...
-}
-
-/* ADD verify_slide_virtual RIGHT HERE, after slide_commit_stext */
-
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 
 static int verify_slide_virtual(int ashmem_fd) {
