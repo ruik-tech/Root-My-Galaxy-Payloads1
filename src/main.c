@@ -465,7 +465,7 @@ int run_exploit(int argc, char **argv) {
 #endif
 #endif
 #endif
-
+  reset_pipe_attempt();
   pin_to_core(CORE);
 #if !defined(APP_FOPS_REUSE_VERIFIED_PAGE) || \
     !APP_FOPS_REUSE_VERIFIED_PAGE
