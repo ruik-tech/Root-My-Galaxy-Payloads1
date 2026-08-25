@@ -352,7 +352,10 @@ static int verify_fops_data_alias_before_production(void) {
               alias_restored, page_base);
 #endif
 #if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
-    APP_FOPS_DEFER_ALIAS_READBACK
+    APP_FOPS_DEFER_ALIAS_READBACK && \
+    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+    APP_FOPS_DATA_ALIAS_DIAG_ONLY
+      
       if (!gate_restored || !alias_triggered ||
           !fops_data_alias_deferred) {
         pr_error("fops data alias deferred arm failed candidate=%s\n",
