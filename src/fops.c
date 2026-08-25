@@ -278,11 +278,8 @@ int try_cfi_stage(void) {
   }
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-  if (!restore_p0_oracle_pages(fd)) {
-    cfi_last_step = 10;
-    cfi_last_errno = errno;
-    goto fail;
-  }
+  /* S25FE: no P0 oracle to restore; using direct fops overwrite */
+  (void)0;
 #endif
 
   uint64_t original_fops = canon_addr(ASHMEM_FOPS);
