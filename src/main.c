@@ -539,7 +539,9 @@ int run_exploit(int argc, char **argv) {
 #endif
     int verified = 0;
 #if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
-    APP_FOPS_DEFER_ALIAS_READBACK
+    APP_FOPS_DEFER_ALIAS_READBACK && \
+    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+    APP_FOPS_DATA_ALIAS_DIAG_ONLY
     int postwrite_result = 0;
     int probe_restored = 0;
     if (fops_data_alias_deferred) {
