@@ -208,13 +208,12 @@ static pid_t spawn_allocation_keeper(void) {
     syscall(SYS_nanosleep, &hold, NULL);
   }
 }
-
-#if defined(APP_PAYLOAD) && APP_PAYLOAD && \
-    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
-    APP_FOPS_DATA_ALIAS_DIAG_ONLY
 static int fops_data_alias_deferred;
 static uintptr_t fops_data_alias_deferred_target;
 static uint64_t fops_data_alias_deferred_initial;
+#if defined(APP_PAYLOAD) && APP_PAYLOAD && \
+    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+    APP_FOPS_DATA_ALIAS_DIAG_ONLY
 
 static int verify_fops_data_alias_before_production(void) {
   uintptr_t saved_gate_page = p0_gate_page_struct;
