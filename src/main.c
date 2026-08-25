@@ -1,5 +1,10 @@
 #include "common.h"
 
+void put_fake_waiter(unsigned char *p, int off, int type, int prio,
+                     int normal_prio, uintptr_t parent, uintptr_t right,
+                     uintptr_t left, uintptr_t task, uintptr_t lock,
+                     int waiter_prio);
+
 uint32_t f_wait;
 uint32_t f_pi_target;
 uint32_t f_pi_chain;
