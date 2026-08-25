@@ -309,7 +309,10 @@ static int verify_fops_data_alias_before_production(void) {
       int alias_triggered =
           app_trigger_fops_oracle_slot(P0_ORACLE_PROBE_SLOT);
 #if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
-    APP_FOPS_DEFER_ALIAS_READBACK
+    APP_FOPS_DEFER_ALIAS_READBACK && \
+    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+    APP_FOPS_DATA_ALIAS_DIAG_ONLY
+
       /*
        * Keep the redirected pipe_buffer queued across production slot 4.
        * Reading it now would only reconfirm the pre-write ashmem_fops value;
