@@ -163,7 +163,7 @@ int data_alias_uses_slide = 1;
 #endif
 char ashmem_path[256] = "/dev/ashmem";
 
-static void put_fake_waiter(unsigned char *payload, size_t waiter_off,
+void put_fake_waiter(unsigned char *payload, size_t waiter_off,
                             uintptr_t tree_parent, uintptr_t tree_right,
                             uintptr_t tree_left, uintptr_t pi_parent,
                             uintptr_t pi_right, uintptr_t pi_left,
