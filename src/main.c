@@ -1,5 +1,10 @@
 #include "common.h"
 
+void put_fake_waiter(unsigned char *p, int off, int type, int prio,
+                     int normal_prio, uintptr_t parent, uintptr_t right,
+                     uintptr_t left, uintptr_t task, uintptr_t lock,
+                     int waiter_prio);
+
 uint32_t f_wait;
 uint32_t f_pi_target;
 uint32_t f_pi_chain;
@@ -17,12 +22,6 @@ atomic_int main_route_delay_usec;
 atomic_int pipe_prepare_request;
 atomic_int pipe_prepare_done;
 int memfd_leak;
-
-void put_fake_waiter(unsigned char *p, int off, int type, int prio,
-                     int normal_prio, uintptr_t parent, uintptr_t right,
-                     uintptr_t left, uintptr_t task, uintptr_t lock,
-                     int waiter_prio);
-
 
 void *waiter_thread(void *arg __attribute__((unused))) {
   disable_rseq_for_thread();
