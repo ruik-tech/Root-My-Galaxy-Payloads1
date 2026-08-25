@@ -666,12 +666,13 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     long ret = sched_setattr_tid(tid, (calls % 19) + 1);
     int saved_errno = *errno_ptr;
 #if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
-    pr_info("slide pselect blocked ready=%d ready_usec=%zu ready_wchan=%s "
+/*    pr_info("slide pselect blocked ready=%d ready_usec=%zu ready_wchan=%s "
             "guard=%d guard_usec=%zu guard_wchan=%s age_usec=%llu tid=%d\n",
             ready_ok, ready_elapsed_usec, ready_wchan,
             guard_ok, guard_elapsed_usec, guard_wchan,
             (unsigned long long)pselect_age_usec, tid);
 #endif
+*/
     atomic_store(&slide_consume_last_sched_ret, (int)ret);
     atomic_store(&slide_consume_last_sched_errno, saved_errno);
     if (ret == 0) {
