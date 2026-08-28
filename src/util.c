@@ -217,7 +217,7 @@ int select_slide_payload_slot(uintptr_t offset) {
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
     return select_slide_payload_index(1);
 #else
-    return select_slide_payload_index(i);
+    return select_slide_payload_index(0);
 #endif
   }
   return 0;
