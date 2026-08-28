@@ -1434,7 +1434,7 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   return 1;
 }
 
-int slide_leak_kernel_base(void) {
+uint64_t slide_leak_kernel_base(void) {
   uint64_t stext = 0xffffff8000000000ULL;
   pr_success("slide-kaslr-ok source=hardcoded pid=%d base=%016llx slide=%016llx\n",
              getpid(), (unsigned long long)stext, 0ULL);
