@@ -134,7 +134,7 @@ static int slide_tracefs_leak_kernel_base(void) {
   return 1;
 }
 
-int slide_leak_kernel_base(void) {
+uint64_t slide_leak_kernel_base(void) {
   const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
   if (forced_offset_arg && *forced_offset_arg) {
     char *end = NULL;
