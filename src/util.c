@@ -1409,6 +1409,8 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     prepare_ctx.childs[index] = -1;
   }
 #if !defined(APP_REQUIRE_FRESH_P0_SESSION) || !APP_REQUIRE_FRESH_P0_SESSION
+    pr_info("SKB_RECLAIM_DIAG: reclaim_sent=%d/%d mode=%d\n",
+          reclaim_sent, reclaim_sends, payload_mode);
   pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
 #endif
   int reclaim_sends = SKB_RECLAIM_SENDS;
