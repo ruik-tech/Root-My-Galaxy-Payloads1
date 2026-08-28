@@ -1368,6 +1368,8 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   memset(deferred_reap_children, 0, sizeof(deferred_reap_children));
 #endif
   for (size_t i = 0; i < drain_triggers; i++) {
+        pr_info("DRAIN_DIAG: trigger=%zu/%zu index=%zu child=%d\n",
+            i + 1, drain_triggers, index, (int)prepare_ctx.childs[index]);
     size_t index = i * mm_objs_per_slab;
     SYSCHK(close(prepare_ctx.memfds[index]));
     prepare_ctx.memfds[index] = -1;
