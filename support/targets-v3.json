@@ -178,7 +178,7 @@
     "requiresFreshP0Session": true,
     "exploit": {
         "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads1/main/artifacts/essi-S731BXXS6BZE2/cve-2026-43499-app.so",
-        "size": 86888
+        "size": 85064
     },
     "kernelsu": {
         "url": "https://raw.githubusercontent.com/ruik-tech/Root-My-Galaxy-Payloads1/main/kernelsu/ksud-essi-S731BXXS6BZE2-kdp",
