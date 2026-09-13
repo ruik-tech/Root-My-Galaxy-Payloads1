@@ -202,17 +202,13 @@ uint32_t __futex_hash(futex_key_t *key, uint32_t futex_hashsize)
 unsigned long futex_hashsize = (unsigned long)-1;
 void futex_init(void)
 {
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-#ifdef KERNELSNITCH_FUTEX_HASH_SIZE
-    futex_hashsize = KERNELSNITCH_FUTEX_HASH_SIZE;
+#if defined(KERNELSNITCH_FUTEX_HASH_SIZE)
+    futex_hashsize = KERNELSNITCH_FUTEX_HASH_SIZE;   /* 0x1000 from offset.h = 4096 = kernel value */
 #else
     unsigned long requested = SYSCHK(sysconf(_SC_NPROCESSORS_ONLN)) * 256;
     futex_hashsize = 1;
     while (futex_hashsize < requested)
         futex_hashsize <<= 1;
-#endif
-#else
-    futex_hashsize = SYSCHK(sysconf(_SC_NPROCESSORS_ONLN) * 256);
 #endif
 }
 uint32_t futex_hash(size_t addr, size_t mm)
