@@ -203,8 +203,10 @@ unsigned long futex_hashsize = (unsigned long)-1;
 void futex_init(void)
 {
 #if defined(KERNELSNITCH_FUTEX_HASH_SIZE)
+    pr_info("futex_hashsize=%lu\n", futex_hashsize);
     futex_hashsize = KERNELSNITCH_FUTEX_HASH_SIZE;   /* 0x1000 from offset.h = 4096 = kernel value */
 #else
+    pr_info("futex_hashsize=%lu\n", futex_hashsize);
     unsigned long requested = SYSCHK(sysconf(_SC_NPROCESSORS_ONLN)) * 256;
     futex_hashsize = 1;
     while (futex_hashsize < requested)
