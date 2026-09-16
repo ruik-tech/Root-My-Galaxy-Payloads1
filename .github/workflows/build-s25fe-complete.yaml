@@ -8,12 +8,6 @@ jobs:
         with:
           path: payloads
 
-      - name: Clone KernelSU
-        run: |
-          git clone https://github.com/tiann/KernelSU.git
-          cd KernelSU
-          git checkout v3.2.5
-          git apply ../payloads/kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
@@ -35,71 +29,17 @@ jobs:
           make TARGET=essi-S731BXXS6BZE2 ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
           ls -la build/essi-S731BXXS6BZE2/
 
-      - name: Build KernelSU module
-        run: |
-          docker run --rm \
-            -v "$PWD/KernelSU:/workspace" \
-            -w /workspace/kernel \
-            ghcr.io/ylarod/ddk-min:android14-6.1-20260313 \
-            bash -lc "
-              sed -i 's/6.1.166-dirty/6.1.157-android14-11/g' \
-                \"\$KDIR/include/generated/utsrelease.h\" \
-                \"\$KDIR/include/config/kernel.release\"
-              make clean
-              CONFIG_KSU=m \
-              CONFIG_KSU_SAMSUNG_KDP=y \
-              CONFIG_KSU_SAMSUNG_RKP=y \
-              CONFIG_KSU_SAMSUNG_DEFEX=y \
-              CC=clang make -j\$(nproc)
-              modinfo ./kernelsu.ko
-            "
-
-      - name: Strip module and copy to ksud assets
-        run: |
-          STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-          $STRIP -d KernelSU/kernel/kernelsu.ko
-          mkdir -p KernelSU/userspace/ksud/bin/aarch64
-          cp KernelSU/kernel/kernelsu.ko KernelSU/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
-
-      - name: Build ksud
-        run: |
-          cd KernelSU/userspace/ksud
-          export SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android35 --sysroot=$SYSROOT"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
-          export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
-          export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          cargo build --release --target aarch64-linux-android -p ksud
-          echo "=== ksud locations ==="
-          find . -name ksud -type f 2>/dev/null
-          find ../../ -name ksud -type f 2>/dev/null
 
       - name: Verify and upload artifacts
         run: |
           echo "=== Payload files ==="
           ls -la payloads/build/essi-S731BXXS6BZE2/
-          echo "=== KernelSU files ==="
-          ls -la KernelSU/kernel/kernelsu.ko
-          echo "=== ksud files ==="
-          find KernelSU -name ksud -type f
           
           # Copy everything to a flat upload directory
           mkdir -p upload
           cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-app.release.so upload/cve-2026-43499-app.so
           cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-root upload/
-          cp KernelSU/kernel/kernelsu.ko upload/android14-6.1_kernelsu-essi-S731BXXS6BZE2-kdp.ko
           
-          # Find ksud wherever cargo put it
-          KSD=$(find KernelSU -name ksud -type f | head -1)
-          if [ -n "$KSD" ]; then
-            cp "$KSD" upload/ksud-essi-SS731BXXS6BZE2-kdp
-            echo "Found ksud at: $KSD"
-          else
-            echo "WARNING: ksud not found"
-          fi
-          
-          ls -la upload/
-
       - name: Upload all artifacts
         uses: actions/upload-artifact@v4
         with:
