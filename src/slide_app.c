@@ -1462,7 +1462,7 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   return 1;
 }
 
-int slide_leak_kernel_base(void) {
+uint64_t slide_leak_kernel_base(void) {
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
   if (forced_offset_arg && *forced_offset_arg) {
