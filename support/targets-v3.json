@@ -6,7 +6,7 @@
       "displayName": "Galaxy S25 FE | Kernel 6.1.157",
       "models": ["SM-S731B"],
       "kernelVersions": ["6.1.157"],
-      "requiresFreshP0Session": true,
+      "requiresFreshP0Session": false,
       "exploit": {
         "url": "https://raw.githubusercontent.com/franchoran98/Root-My-Galaxy-Payloads-S25_FE/main/artifacts/r13s-S731BXXS9BZH1/cve-2026-43499-app.so",
         "size": 141232
