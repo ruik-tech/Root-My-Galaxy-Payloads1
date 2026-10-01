@@ -1,0 +1,47 @@
+name: Build S25 FE Complete
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: payloads
+
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Build exploit payload (all + release)
+        run: |
+          cd payloads
+          # Build root helper and debug payload
+          make TARGET=essi-S731BXXS6BZE2 ANDROID_NDK_HOME="$ANDROID_NDK_HOME"
+          # Build release payload
+          make TARGET=essi-S731BXXS6BZE2 ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
+          ls -la build/essi-S731BXXS6BZE2/
+
+
+      - name: Verify and upload artifacts
+        run: |
+          echo "=== Payload files ==="
+          ls -la payloads/build/essi-S731BXXS6BZE2/
+          
+          # Copy everything to a flat upload directory
+          mkdir -p upload
+          cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-app.release.so upload/cve-2026-43499-app.so
+          cp payloads/build/essi-S731BXXS6BZE2/cve-2026-43499-root upload/
+          
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25fe-complete
+          path: upload/*
